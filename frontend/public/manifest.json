@@ -1,7 +1,7 @@
 {
   "name": "TravelMind AI - Assistente di Viaggio",
   "short_name": "TravelMind",
-  "description": "Il tuo assistente personale di viaggio per il Giappone e tutto il mondo con intelligenza artificiale e mappa offline.",
+  "description": "Il tuo assistente personale di viaggio per il Giappone e tutto il mondo con intelligenza artificiale, mappe e routing mezzi pubblici offline.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
@@ -9,14 +9,20 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/icons/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png"
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-512x512.png",
+      "src": "/icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icon.svg",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/svg+xml"
     }
   ]
 }

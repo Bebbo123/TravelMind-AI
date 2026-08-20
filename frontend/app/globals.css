@@ -1,3 +1,5 @@
+@import 'leaflet/dist/leaflet.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -21,4 +23,12 @@
 body {
   @apply bg-background text-foreground;
   font-family: 'Inter', sans-serif;
+}
+
+/* Fix Leaflet map container styling */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  border-radius: 1rem;
+  z-index: 10;
 }
