@@ -14,6 +14,16 @@ const MapComponent = dynamic(() => import('./components/MapComponent'), {
   ),
 });
 
+// Dynamic import for TravelHub component to handle client-side localStorage
+const TravelHub = dynamic(() => import('./components/TravelHub'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-[300px] rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 text-sm animate-pulse">
+      Caricamento Travel Planner & Documenti... 🧳
+    </div>
+  ),
+});
+
 export default function Home() {
   const [isOnline, setIsOnline] = useState<boolean>(true);
 
@@ -30,6 +40,13 @@ export default function Home() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  const scrollToTravelHub = () => {
+    const element = document.getElementById('travel-hub');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 md:p-10 text-center bg-gradient-to-br from-slate-950 via-slate-900 to-black text-white relative overflow-hidden">
@@ -64,16 +81,25 @@ export default function Home() {
 
       {/* Action Buttons */}
       <div className="flex flex-wrap justify-center gap-4 mb-12">
-        <button className="px-8 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 font-semibold text-white transition-all shadow-lg shadow-blue-500/25 active:scale-95">
+        <button 
+          onClick={scrollToTravelHub}
+          className="px-8 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 font-semibold text-white transition-all shadow-lg shadow-blue-500/25 active:scale-95 cursor-pointer"
+        >
           Pianifica Nuovo Viaggio ✨
         </button>
-        <button className="px-8 py-3.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 font-semibold text-slate-200 transition-all active:scale-95">
-          Documenti Offline 🧳
+        <button 
+          onClick={scrollToTravelHub}
+          className="px-8 py-3.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 font-semibold text-slate-200 transition-all active:scale-95 cursor-pointer"
+        >
+          Documenti & Prenotazioni 🧳
         </button>
       </div>
 
       {/* Main Interactive Sections Container */}
       <div className="max-w-6xl w-full space-y-8 mb-12">
+        {/* Travel Planner & Documents Hub */}
+        <TravelHub />
+
         {/* Leaflet OpenStreetMap Interactive Component */}
         <MapComponent />
 
