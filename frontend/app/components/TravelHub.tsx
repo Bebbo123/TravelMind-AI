@@ -15,7 +15,12 @@ export default function TravelHub() {
   const [isAccommodationModalOpen, setIsAccommodationModalOpen] = useState(false);
   const [isPlaceModalOpen, setIsPlaceModalOpen] = useState(false);
 
-  // New Flight Form State
+  // Edit Tracking States
+  const [editingFlightId, setEditingFlightId] = useState<string | null>(null);
+  const [editingAccId, setEditingAccId] = useState<string | null>(null);
+  const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
+
+  // New/Edit Flight Form State
   const [newFlight, setNewFlight] = useState<Partial<FlightTicket>>({
     airline: '',
     flightNumber: '',
@@ -30,7 +35,7 @@ export default function TravelHub() {
     notes: ''
   });
 
-  // New Accommodation Form State
+  // New/Edit Accommodation Form State
   const [newAcc, setNewAcc] = useState<Partial<Accommodation>>({
     name: '',
     address: '',
@@ -43,7 +48,7 @@ export default function TravelHub() {
     notes: ''
   });
 
-  // New Place Form State
+  // New/Edit Place Form State
   const [newPlace, setNewPlace] = useState<Partial<PlaceToVisit>>({
     name: '',
     category: 'Santuario/Tempio',
@@ -73,30 +78,8 @@ export default function TravelHub() {
   };
 
   // --- Flight Operations ---
-  const handleAddFlight = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!data || !newFlight.flightNumber || !newFlight.origin || !newFlight.destination) return;
-
-    const flight: FlightTicket = {
-      id: 'f_' + Date.now(),
-      airline: newFlight.airline || 'Compagnia Aerea',
-      flightNumber: newFlight.flightNumber,
-      origin: newFlight.origin,
-      destination: newFlight.destination,
-      departureTime: newFlight.departureTime || new Date().toISOString().slice(0, 16),
-      arrivalTime: newFlight.arrivalTime || new Date().toISOString().slice(0, 16),
-      bookingRef: newFlight.bookingRef || 'N/A',
-      terminal: newFlight.terminal || '',
-      gate: newFlight.gate || '',
-      seat: newFlight.seat || '',
-      notes: newFlight.notes || ''
-    };
-
-    updateData({
-      ...data,
-      flights: [...data.flights, flight]
-    });
-
+  const handleOpenAddFlight = () => {
+    setEditingFlightId(null);
     setNewFlight({
       airline: '',
       flightNumber: '',
@@ -110,40 +93,91 @@ export default function TravelHub() {
       seat: '',
       notes: ''
     });
+    setIsFlightModalOpen(true);
+  };
+
+  const handleOpenEditFlight = (flight: FlightTicket) => {
+    setEditingFlightId(flight.id);
+    setNewFlight({
+      airline: flight.airline,
+      flightNumber: flight.flightNumber,
+      origin: flight.origin,
+      destination: flight.destination,
+      departureTime: flight.departureTime,
+      arrivalTime: flight.arrivalTime,
+      bookingRef: flight.bookingRef,
+      terminal: flight.terminal || '',
+      gate: flight.gate || '',
+      seat: flight.seat || '',
+      notes: flight.notes || ''
+    });
+    setIsFlightModalOpen(true);
+  };
+
+  const handleSaveFlight = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!data || !newFlight.flightNumber || !newFlight.origin || !newFlight.destination) return;
+
+    if (editingFlightId) {
+      // Editing existing flight
+      const updatedFlights = data.flights.map(f => {
+        if (f.id === editingFlightId) {
+          return {
+            ...f,
+            airline: newFlight.airline || 'Compagnia Aerea',
+            flightNumber: newFlight.flightNumber!,
+            origin: newFlight.origin!,
+            destination: newFlight.destination!,
+            departureTime: newFlight.departureTime || f.departureTime,
+            arrivalTime: newFlight.arrivalTime || f.arrivalTime,
+            bookingRef: newFlight.bookingRef || 'N/A',
+            terminal: newFlight.terminal || '',
+            gate: newFlight.gate || '',
+            seat: newFlight.seat || '',
+            notes: newFlight.notes || ''
+          };
+        }
+        return f;
+      });
+
+      updateData({ ...data, flights: updatedFlights });
+    } else {
+      // Creating new flight
+      const flight: FlightTicket = {
+        id: 'f_' + Date.now(),
+        airline: newFlight.airline || 'Compagnia Aerea',
+        flightNumber: newFlight.flightNumber,
+        origin: newFlight.origin,
+        destination: newFlight.destination,
+        departureTime: newFlight.departureTime || new Date().toISOString().slice(0, 16),
+        arrivalTime: newFlight.arrivalTime || new Date().toISOString().slice(0, 16),
+        bookingRef: newFlight.bookingRef || 'N/A',
+        terminal: newFlight.terminal || '',
+        gate: newFlight.gate || '',
+        seat: newFlight.seat || '',
+        notes: newFlight.notes || ''
+      };
+
+      updateData({ ...data, flights: [...data.flights, flight] });
+    }
+
     setIsFlightModalOpen(false);
+    setEditingFlightId(null);
   };
 
   const handleDeleteFlight = (id: string) => {
     if (!data) return;
-    updateData({
-      ...data,
-      flights: data.flights.filter(f => f.id !== id)
-    });
+    if (confirm('Sei sicuro di voler eliminare questo volo?')) {
+      updateData({
+        ...data,
+        flights: data.flights.filter(f => f.id !== id)
+      });
+    }
   };
 
   // --- Accommodation Operations ---
-  const handleAddAccommodation = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!data || !newAcc.name || !newAcc.checkIn || !newAcc.checkOut) return;
-
-    const acc: Accommodation = {
-      id: 'a_' + Date.now(),
-      name: newAcc.name,
-      address: newAcc.address || '',
-      city: newAcc.city || 'Tokyo',
-      checkIn: newAcc.checkIn,
-      checkOut: newAcc.checkOut,
-      bookingRef: newAcc.bookingRef || '',
-      cost: newAcc.cost ? Number(newAcc.cost) : undefined,
-      currency: 'JPY',
-      notes: newAcc.notes || ''
-    };
-
-    updateData({
-      ...data,
-      accommodations: [...data.accommodations, acc]
-    });
-
+  const handleOpenAddAcc = () => {
+    setEditingAccId(null);
     setNewAcc({
       name: '',
       address: '',
@@ -155,39 +189,85 @@ export default function TravelHub() {
       currency: 'JPY',
       notes: ''
     });
+    setIsAccommodationModalOpen(true);
+  };
+
+  const handleOpenEditAcc = (acc: Accommodation) => {
+    setEditingAccId(acc.id);
+    setNewAcc({
+      name: acc.name,
+      address: acc.address,
+      city: acc.city,
+      checkIn: acc.checkIn,
+      checkOut: acc.checkOut,
+      bookingRef: acc.bookingRef || '',
+      cost: acc.cost,
+      currency: acc.currency || 'JPY',
+      notes: acc.notes || ''
+    });
+    setIsAccommodationModalOpen(true);
+  };
+
+  const handleSaveAccommodation = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!data || !newAcc.name || !newAcc.checkIn || !newAcc.checkOut) return;
+
+    if (editingAccId) {
+      // Editing existing accommodation
+      const updatedAccs = data.accommodations.map(a => {
+        if (a.id === editingAccId) {
+          return {
+            ...a,
+            name: newAcc.name!,
+            address: newAcc.address || '',
+            city: newAcc.city || 'Tokyo',
+            checkIn: newAcc.checkIn!,
+            checkOut: newAcc.checkOut!,
+            bookingRef: newAcc.bookingRef || '',
+            cost: newAcc.cost ? Number(newAcc.cost) : undefined,
+            currency: 'JPY',
+            notes: newAcc.notes || ''
+          };
+        }
+        return a;
+      });
+
+      updateData({ ...data, accommodations: updatedAccs });
+    } else {
+      // Creating new accommodation
+      const acc: Accommodation = {
+        id: 'a_' + Date.now(),
+        name: newAcc.name,
+        address: newAcc.address || '',
+        city: newAcc.city || 'Tokyo',
+        checkIn: newAcc.checkIn,
+        checkOut: newAcc.checkOut,
+        bookingRef: newAcc.bookingRef || '',
+        cost: newAcc.cost ? Number(newAcc.cost) : undefined,
+        currency: 'JPY',
+        notes: newAcc.notes || ''
+      };
+
+      updateData({ ...data, accommodations: [...data.accommodations, acc] });
+    }
+
     setIsAccommodationModalOpen(false);
+    setEditingAccId(null);
   };
 
   const handleDeleteAcc = (id: string) => {
     if (!data) return;
-    updateData({
-      ...data,
-      accommodations: data.accommodations.filter(a => a.id !== id)
-    });
+    if (confirm('Sei sicuro di voler eliminare questa prenotazione di alloggio?')) {
+      updateData({
+        ...data,
+        accommodations: data.accommodations.filter(a => a.id !== id)
+      });
+    }
   };
 
   // --- Place Operations ---
-  const handleAddPlace = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!data || !newPlace.name) return;
-
-    const place: PlaceToVisit = {
-      id: 'p_' + Date.now(),
-      name: newPlace.name,
-      category: newPlace.category || 'Santuario/Tempio',
-      city: newPlace.city || 'Tokyo',
-      address: newPlace.address || '',
-      priority: newPlace.priority || 'Alta',
-      status: 'Da Visitare',
-      notes: newPlace.notes || '',
-      estimatedCostYen: newPlace.estimatedCostYen ? Number(newPlace.estimatedCostYen) : 0
-    };
-
-    updateData({
-      ...data,
-      places: [...data.places, place]
-    });
-
+  const handleOpenAddPlace = () => {
+    setEditingPlaceId(null);
     setNewPlace({
       name: '',
       category: 'Santuario/Tempio',
@@ -198,7 +278,66 @@ export default function TravelHub() {
       notes: '',
       estimatedCostYen: 0
     });
+    setIsPlaceModalOpen(true);
+  };
+
+  const handleOpenEditPlace = (place: PlaceToVisit) => {
+    setEditingPlaceId(place.id);
+    setNewPlace({
+      name: place.name,
+      category: place.category,
+      city: place.city,
+      address: place.address || '',
+      priority: place.priority,
+      status: place.status,
+      notes: place.notes || '',
+      estimatedCostYen: place.estimatedCostYen || 0
+    });
+    setIsPlaceModalOpen(true);
+  };
+
+  const handleSavePlace = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!data || !newPlace.name) return;
+
+    if (editingPlaceId) {
+      // Editing existing place
+      const updatedPlaces = data.places.map(p => {
+        if (p.id === editingPlaceId) {
+          return {
+            ...p,
+            name: newPlace.name!,
+            category: newPlace.category || 'Santuario/Tempio',
+            city: newPlace.city || 'Tokyo',
+            address: newPlace.address || '',
+            priority: newPlace.priority || 'Alta',
+            notes: newPlace.notes || '',
+            estimatedCostYen: newPlace.estimatedCostYen ? Number(newPlace.estimatedCostYen) : 0
+          };
+        }
+        return p;
+      });
+
+      updateData({ ...data, places: updatedPlaces });
+    } else {
+      // Creating new place
+      const place: PlaceToVisit = {
+        id: 'p_' + Date.now(),
+        name: newPlace.name,
+        category: newPlace.category || 'Santuario/Tempio',
+        city: newPlace.city || 'Tokyo',
+        address: newPlace.address || '',
+        priority: newPlace.priority || 'Alta',
+        status: 'Da Visitare',
+        notes: newPlace.notes || '',
+        estimatedCostYen: newPlace.estimatedCostYen ? Number(newPlace.estimatedCostYen) : 0
+      };
+
+      updateData({ ...data, places: [...data.places, place] });
+    }
+
     setIsPlaceModalOpen(false);
+    setEditingPlaceId(null);
   };
 
   const handleTogglePlaceStatus = (id: string) => {
@@ -215,10 +354,12 @@ export default function TravelHub() {
 
   const handleDeletePlace = (id: string) => {
     if (!data) return;
-    updateData({
-      ...data,
-      places: data.places.filter(p => p.id !== id)
-    });
+    if (confirm('Sei sicuro di voler eliminare questo luogo dalla tua lista?')) {
+      updateData({
+        ...data,
+        places: data.places.filter(p => p.id !== id)
+      });
+    }
   };
 
   if (!data) {
@@ -245,7 +386,7 @@ export default function TravelHub() {
             Travel Planner & Carte d'Imbarco
           </h2>
           <p className="text-slate-400 text-sm mt-1">
-            Gestisci tutti i dettagli dei tuoi voli, prenotazioni alloggi e lista dei luoghi da esplorare.
+            Inserisci e modifica tutti i dettagli dei tuoi voli, prenotazioni alloggi e luoghi da esplorare.
           </p>
         </div>
 
@@ -308,7 +449,7 @@ export default function TravelHub() {
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-bold text-slate-200">I Miei Voli & Carte d'Imbarco</h3>
             <button
-              onClick={() => setIsFlightModalOpen(true)}
+              onClick={handleOpenAddFlight}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md"
             >
               + Aggiungi Volo ✈️
@@ -324,16 +465,25 @@ export default function TravelHub() {
               {data.flights.map((flight) => (
                 <div key={flight.id} className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-800 hover:border-slate-700 transition-all shadow-xl relative group">
                   
-                  {/* Delete Button */}
-                  <button
-                    onClick={() => handleDeleteFlight(flight.id)}
-                    className="absolute top-4 right-4 text-slate-500 hover:text-rose-400 text-sm p-1 rounded-lg hover:bg-rose-950/30 transition-all"
-                    title="Elimina volo"
-                  >
-                    🗑️
-                  </button>
+                  {/* Action Buttons: Edit & Delete */}
+                  <div className="absolute top-4 right-4 flex items-center gap-2">
+                    <button
+                      onClick={() => handleOpenEditFlight(flight)}
+                      className="text-slate-400 hover:text-blue-400 text-xs px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition-all flex items-center gap-1 border border-slate-700/60"
+                      title="Modifica volo"
+                    >
+                      ✏️ Modifica
+                    </button>
+                    <button
+                      onClick={() => handleDeleteFlight(flight.id)}
+                      className="text-slate-500 hover:text-rose-400 text-xs p-1 rounded-lg hover:bg-rose-950/30 transition-all"
+                      title="Elimina volo"
+                    >
+                      🗑️
+                    </button>
+                  </div>
 
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pr-24">
                     {/* Airline & Route */}
                     <div>
                       <div className="flex items-center gap-3 mb-2">
@@ -363,7 +513,7 @@ export default function TravelHub() {
                         <span className="font-semibold text-slate-200">{new Date(flight.arrivalTime).toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' })}</span>
                       </div>
                       <div className="border-l border-slate-700/60 pl-4">
-                        <span className="block text-slate-500 text-[10px] uppercase font-semibold">PNR / Codice Booking</span>
+                        <span className="block text-slate-500 text-[10px] uppercase font-semibold">PNR / Booking</span>
                         <span className="font-mono font-bold text-amber-400">{flight.bookingRef}</span>
                       </div>
                       {flight.seat && (
@@ -395,7 +545,7 @@ export default function TravelHub() {
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-bold text-slate-200">Prenotazioni Alloggi & Hotel</h3>
             <button
-              onClick={() => setIsAccommodationModalOpen(true)}
+              onClick={handleOpenAddAcc}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md"
             >
               + Aggiungi Alloggio 🏨
@@ -417,15 +567,25 @@ export default function TravelHub() {
                 return (
                   <div key={acc.id} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all shadow-xl relative flex flex-col justify-between">
                     
-                    <button
-                      onClick={() => handleDeleteAcc(acc.id)}
-                      className="absolute top-4 right-4 text-slate-500 hover:text-rose-400 text-sm p-1 rounded-lg hover:bg-rose-950/30 transition-all"
-                      title="Elimina alloggio"
-                    >
-                      🗑️
-                    </button>
+                    {/* Action Buttons: Edit & Delete */}
+                    <div className="absolute top-4 right-4 flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenEditAcc(acc)}
+                        className="text-slate-400 hover:text-blue-400 text-xs px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition-all flex items-center gap-1 border border-slate-700/60"
+                        title="Modifica alloggio"
+                      >
+                        ✏️ Modifica
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAcc(acc.id)}
+                        className="text-slate-500 hover:text-rose-400 text-xs p-1 rounded-lg hover:bg-rose-950/30 transition-all"
+                        title="Elimina alloggio"
+                      >
+                        🗑️
+                      </button>
+                    </div>
 
-                    <div>
+                    <div className="pr-24">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="px-2.5 py-0.5 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 font-bold text-xs rounded-full">
                           📍 {acc.city}
@@ -476,7 +636,7 @@ export default function TravelHub() {
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-bold text-slate-200">Lista Luoghi & Tappe da Visitare</h3>
             <button
-              onClick={() => setIsPlaceModalOpen(true)}
+              onClick={handleOpenAddPlace}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md"
             >
               + Aggiungi Luogo 📍
@@ -492,14 +652,14 @@ export default function TravelHub() {
               {data.places.map((place) => (
                 <div 
                   key={place.id} 
-                  className={`p-5 rounded-2xl border transition-all shadow-lg flex flex-col justify-between ${
+                  className={`p-5 rounded-2xl border transition-all shadow-lg flex flex-col justify-between relative group ${
                     place.status === 'Visitato'
                       ? 'bg-slate-950/40 border-slate-800/60 opacity-75'
                       : 'bg-slate-900 border-slate-800 hover:border-slate-700'
                   }`}
                 >
                   <div>
-                    <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center justify-between gap-2 mb-3 pr-8">
                       <span className="px-2.5 py-0.5 bg-blue-500/10 border border-blue-500/30 text-blue-400 font-semibold text-[11px] rounded-full">
                         {place.category}
                       </span>
@@ -536,13 +696,22 @@ export default function TravelHub() {
                       {place.status === 'Visitato' ? '✓ Visitato' : '⭕ Segna come Visitato'}
                     </button>
 
-                    <button
-                      onClick={() => handleDeletePlace(place.id)}
-                      className="text-slate-500 hover:text-rose-400 text-xs p-1 rounded-lg"
-                      title="Elimina luogo"
-                    >
-                      🗑️
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleOpenEditPlace(place)}
+                        className="text-slate-400 hover:text-blue-400 text-xs px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60"
+                        title="Modifica luogo"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => handleDeletePlace(place.id)}
+                        className="text-slate-500 hover:text-rose-400 text-xs p-1 rounded-lg"
+                        title="Elimina luogo"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -551,16 +720,18 @@ export default function TravelHub() {
         </div>
       )}
 
-      {/* MODAL 1: ADD FLIGHT */}
+      {/* MODAL 1: ADD/EDIT FLIGHT */}
       {isFlightModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-left">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-bold text-white">✈️ Aggiungi Volo / Carta Imbarco</h3>
+              <h3 className="text-lg font-bold text-white">
+                {editingFlightId ? '✏️ Modifica Volo / Carta Imbarco' : '✈️ Aggiungi Volo / Carta Imbarco'}
+              </h3>
               <button onClick={() => setIsFlightModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <form onSubmit={handleAddFlight} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveFlight} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-400 mb-1">Compagnia Aerea</label>
@@ -688,7 +859,7 @@ export default function TravelHub() {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 shadow-md"
                 >
-                  Salva Volo
+                  {editingFlightId ? 'Salva Modifiche' : 'Salva Volo'}
                 </button>
               </div>
             </form>
@@ -696,16 +867,18 @@ export default function TravelHub() {
         </div>
       )}
 
-      {/* MODAL 2: ADD ACCOMMODATION */}
+      {/* MODAL 2: ADD/EDIT ACCOMMODATION */}
       {isAccommodationModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-left">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-bold text-white">🏨 Aggiungi Alloggio / Hotel</h3>
+              <h3 className="text-lg font-bold text-white">
+                {editingAccId ? '✏️ Modifica Alloggio / Hotel' : '🏨 Aggiungi Alloggio / Hotel'}
+              </h3>
               <button onClick={() => setIsAccommodationModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <form onSubmit={handleAddAccommodation} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveAccommodation} className="space-y-4 text-xs">
               <div>
                 <label className="block text-slate-400 mb-1">Nome Struttura / Hotel</label>
                 <input
@@ -811,7 +984,7 @@ export default function TravelHub() {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 shadow-md"
                 >
-                  Salva Alloggio
+                  {editingAccId ? 'Salva Modifiche' : 'Salva Alloggio'}
                 </button>
               </div>
             </form>
@@ -819,16 +992,18 @@ export default function TravelHub() {
         </div>
       )}
 
-      {/* MODAL 3: ADD PLACE TO VISIT */}
+      {/* MODAL 3: ADD/EDIT PLACE TO VISIT */}
       {isPlaceModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-left">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-bold text-white">📍 Aggiungi Luogo da Visitare</h3>
+              <h3 className="text-lg font-bold text-white">
+                {editingPlaceId ? '✏️ Modifica Luogo da Visitare' : '📍 Aggiungi Luogo da Visitare'}
+              </h3>
               <button onClick={() => setIsPlaceModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <form onSubmit={handleAddPlace} className="space-y-4 text-xs">
+            <form onSubmit={handleSavePlace} className="space-y-4 text-xs">
               <div>
                 <label className="block text-slate-400 mb-1">Nome Luogo / Attraction</label>
                 <input
@@ -920,7 +1095,7 @@ export default function TravelHub() {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 shadow-md"
                 >
-                  Salva Luogo
+                  {editingPlaceId ? 'Salva Modifiche' : 'Salva Luogo'}
                 </button>
               </div>
             </form>
