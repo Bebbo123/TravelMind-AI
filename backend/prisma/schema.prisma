@@ -1,0 +1,84 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String?
+  name          String?
+  avatarUrl     String?
+  trips         TripMember[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Trip {
+  id              String       @id @default(uuid())
+  name            String
+  country         String
+  startDate       DateTime
+  endDate         DateTime
+  budget          Float?
+  travelStyles    String[]
+  members         TripMember[]
+  itineraryItems  ItineraryItem[]
+  accommodations  Accommodation[]
+  places          Place[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model TripMember {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  trip      Trip     @relation(fields: [tripId], references: [id])
+  tripId    String
+  role      String
+  @@unique([userId, tripId])
+}
+
+model ItineraryItem {
+  id          String   @id @default(uuid())
+  trip        Trip     @relation(fields: [tripId], references: [id])
+  tripId      String
+  place       Place?   @relation(fields: [placeId], references: [id])
+  placeId     String?
+  startTime   DateTime
+  endTime     DateTime
+  type        String
+  notes       String?
+  orderIndex  Int
+}
+
+model Place {
+  id              String   @id @default(uuid())
+  trip            Trip     @relation(fields: [tripId], references: [id])
+  tripId          String
+  name            String
+  latitude        Float
+  longitude       Float
+  googlePlaceId   String?
+  category        String
+  status          String
+  itineraryItems  ItineraryItem[]
+}
+
+model Accommodation {
+  id            String   @id @default(uuid())
+  trip          Trip     @relation(fields: [tripId], references: [id])
+  tripId        String
+  name          String
+  checkIn       DateTime
+  checkOut      DateTime
+  latitude      Float
+  longitude     Float
+  cost          Float?
+  bookingRef    String?
+}

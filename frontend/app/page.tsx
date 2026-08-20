@@ -1,0 +1,103 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+
+export default function Home() {
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen p-6 md:p-12 text-center bg-gradient-to-br from-slate-950 via-slate-900 to-black text-white relative overflow-hidden">
+      
+      {/* Network Status Badge */}
+      <div className="absolute top-6 right-6 flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold backdrop-blur-md border transition-all shadow-md">
+        {isOnline ? (
+          <span className="flex items-center gap-2 text-emerald-400 bg-emerald-950/40 border-emerald-800/60 px-3 py-1.5 rounded-full">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Online • Connesso al Cloud
+          </span>
+        ) : (
+          <span className="flex items-center gap-2 text-amber-400 bg-amber-950/40 border-amber-800/60 px-3 py-1.5 rounded-full">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+            Offline • Modalità Viaggio Attiva
+          </span>
+        )}
+      </div>
+
+      {/* Main Hero Header */}
+      <div className="max-w-4xl mt-12 mb-8">
+        <div className="inline-block px-4 py-1.5 mb-4 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-sm font-medium">
+          🇯🇵 Assistente Intelligente per il Giappone & Viaggi Internazionali
+        </div>
+        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-500">
+          TravelMind AI
+        </h1>
+        <p className="text-lg md:text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
+          Il tuo concierge personale per organizzare itinerari, esplorare tappe imperdibili e navigare in totale sicurezza sia online che offline durante i tuoi spostamenti.
+        </p>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex flex-wrap justify-center gap-4 mb-14">
+        <button className="px-8 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 font-semibold text-white transition-all shadow-lg shadow-blue-500/25 active:scale-95">
+          Pianifica Nuovo Viaggio ✨
+        </button>
+        <button className="px-8 py-3.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 font-semibold text-slate-200 transition-all active:scale-95">
+          Consultare Documenti Offline 🧳
+        </button>
+      </div>
+
+      {/* Core Feature Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl w-full">
+        <FeatureCard 
+          title="Scoperta Intelligente AI" 
+          icon="✨" 
+          desc="Suggerimenti personalizzati e creazione dinamica degli itinerari alimentati da Google Gemini." 
+        />
+        <FeatureCard 
+          title="Routing & Mappe" 
+          icon="🗺️" 
+          desc="Integrazione avanzata con Google Maps per tragitti a piedi, trasporti pubblici e treni Shinkansen." 
+        />
+        <FeatureCard 
+          title="Concierge in Tempo Reale" 
+          icon="💬" 
+          desc="Traduzione contestuale istantanea e consigli proattivi 'Esplora Ora' in base alla tua posizione." 
+        />
+        <FeatureCard 
+          title="Supporto Offline Integrato" 
+          icon="📡" 
+          desc="Accedi ai tuoi itinerari, mappe salvate, budget e prenotazioni anche senza connessione dati in viaggio." 
+        />
+      </div>
+
+      {/* Footer Info */}
+      <footer className="mt-16 text-slate-500 text-xs">
+        TravelMind AI • Pronto per il Web & Funzionamento Offline (PWA)
+      </footer>
+    </div>
+  );
+}
+
+function FeatureCard({ title, icon, desc }: { title: string, icon: string, desc: string }) {
+  return (
+    <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-slate-600 transition-all hover:-translate-y-1 text-left backdrop-blur-sm shadow-xl">
+      <div className="text-4xl mb-4">{icon}</div>
+      <h3 className="text-xl font-bold mb-2 text-slate-100">{title}</h3>
+      <p className="text-slate-400 text-sm leading-relaxed">{desc}</p>
+    </div>
+  );
+}
