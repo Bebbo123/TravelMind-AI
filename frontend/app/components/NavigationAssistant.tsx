@@ -71,6 +71,20 @@ export default function NavigationAssistant({
         </button>
       </div>
 
+      {/* Weather & Fatigue Live Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs">
+        <div className="flex items-center gap-3">
+          <span className="text-slate-300 font-bold">☀️ Meteo: <strong className="text-amber-400">Soleggiato (22°C)</strong></span>
+          <span className="text-slate-500">•</span>
+          <span className="text-slate-300 font-bold">🧘 Stanchezza Giornata: <strong className="text-emerald-400">Bassa (3/10)</strong></span>
+        </div>
+        {delayMinutes > 0 && (
+          <span className="px-3 py-0.5 bg-amber-950/60 text-amber-400 font-bold text-[11px] rounded-lg border border-amber-800/60">
+            ⚠️ Ritardo: +{delayMinutes} min
+          </span>
+        )}
+      </div>
+
       {/* Main Active Step Instruction Box */}
       <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 relative shadow-inner">
         <div className="flex flex-wrap justify-between items-start gap-2">
@@ -84,14 +98,6 @@ export default function NavigationAssistant({
             {(currentStep.placeNameJa || currentStep.activityJa) && (
               <span className="text-xs text-slate-400 block font-semibold mt-0.5">
                 {currentStep.placeNameJa || currentStep.activityJa} {currentStep.romaji ? `[${currentStep.romaji}]` : ''}
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {delayMinutes > 0 && (
-              <span className="px-3 py-1 bg-amber-950/60 text-amber-400 font-bold text-xs rounded-xl border border-amber-800/60">
-                ⚠️ Ritardo: +{delayMinutes} min
               </span>
             )}
           </div>

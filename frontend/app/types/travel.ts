@@ -87,4 +87,13 @@ export interface AIItineraryItem {
   website?: string;
   imageUrl?: string;
   nearbyPlaces?: string[];
+  // Master Michelin & Gastronomy Additions
+  isAISuggested?: boolean;
+  restaurantName?: string;
+  cuisineType?: string;
+  recommendedDish?: string;
+  priceRangeEuros?: number;
+  districtFoodSpecialties?: string[];
+  fatigueLevel?: 'Basso (1-3)' | 'Medio (4-6)' | 'Intenso (7-9)';
+  weatherForecast?: 'Soleggiato ☀️' | 'Nuvoloso ⛅' | 'Pioggia ☔';
 }

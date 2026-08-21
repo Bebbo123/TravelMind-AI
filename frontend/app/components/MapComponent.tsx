@@ -65,6 +65,8 @@ function cleanSearchQuery(rawName: string, city?: string): string {
     .replace(/^Spostamento dall'Aeroporto all'Hotel \((.*?)\)/i, '$1')
     .replace(/^Visita a /i, '')
     .replace(/^Esplorazione di /i, '')
+    .replace(/^Passeggiata a /i, '')
+    .replace(/^Pranzo Gastronomico: /i, '')
     .replace(/^Pranzo Tipico/i, city || '')
     .replace(/^Passeggiata a piedi nel quartiere centrale di /i, '')
     .trim();
@@ -229,7 +231,7 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
             cat = 'taxi';
           } else if (item.transitType === 'walk') {
             cat = 'walk';
-          } else if (item.type === 'meal') {
+          } else if (item.type === 'meal' || item.activity.toLowerCase().includes('pranzo') || item.activity.toLowerCase().includes('cena')) {
             cat = 'food';
           } else if (item.type === 'break' || item.type === 'hotel_return' || item.activity.toLowerCase().includes('hotel') || item.activity.toLowerCase().includes('check-in')) {
             cat = 'hotel';
@@ -267,7 +269,7 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
         return pt;
       });
 
-      // Render Markers & Color-Coded Polylines by Transport Type
+      // Command Center Color Matrix for Map Pins
       const allLatLngs: [number, number][] = [];
 
       for (let i = 0; i < pointsToPlot.length; i++) {
@@ -286,13 +288,20 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
           pt.category === 'hotel' ? '🏨' :
           pt.category === 'food' ? '🍜' : '📍';
 
-        // Numbered Badge Custom HTML Marker
+        const pinBgColor = 
+          pt.category === 'hotel' ? '#3b82f6' :       // Blue for Hotel
+          pt.category === 'food' ? '#f59e0b' :        // Amber for Food/Restaurant
+          pt.category === 'flight' ? '#a855f7' :      // Purple for Flight
+          pt.category === 'subway' || pt.category === 'train' ? '#06b6d4' : // Cyan for Transit
+          '#6366f1';                                  // Indigo for Attraction
+
+        // Command Center Custom Badge Marker
         const customIcon = L.divIcon({
           className: 'custom-map-pin',
           html: `
             <div style="
-              background: #1e293b;
-              border: 2px solid #6366f1;
+              background: #0f172a;
+              border: 2px solid ${pinBgColor};
               border-radius: 9999px;
               color: white;
               font-weight: 800;
@@ -301,10 +310,10 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
               display: flex;
               align-items: center;
               gap: 4px;
-              box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+              box-shadow: 0 4px 14px rgba(0,0,0,0.6);
               white-space: nowrap;
             ">
-              <span style="background: #4f46e5; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px;">${pt.stepNumber}</span>
+              <span style="background: ${pinBgColor}; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px;">${pt.stepNumber}</span>
               <span>${iconEmoji}</span>
               <span style="max-width: 120px; overflow: hidden; text-overflow: ellipsis;">${displayName}</span>
             </div>
@@ -318,7 +327,7 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
         const popupContent = `
           <div style="color: #0f172a; font-family: sans-serif; min-width: 190px;">
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
-              <span style="background: #4f46e5; color: white; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;">${pt.stepNumber}</span>
+              <span style="background: ${pinBgColor}; color: white; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;">${pt.stepNumber}</span>
               <strong style="font-size: 13px;">${iconEmoji} ${displayName}</strong>
             </div>
             ${pt.time ? `<span style="font-size: 11px; color: #4f46e5; font-weight: bold;">🕒 ${pt.time}</span>` : ''}
@@ -340,24 +349,24 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
           let legTitle = `Spostamento Tappa #${pt.stepNumber} ➔ #${nextPt.stepNumber}`;
 
           if (pt.category === 'flight' || nextPt.category === 'flight') {
-            lineColor = '#a855f7'; // Purple for Flight
+            lineColor = '#a855f7';
             dashArray = '10, 10';
             weight = 5;
             legTitle = `✈️ Tratta Volo Aereo (${pt.nameIt} ➔ ${nextPt.nameIt})`;
           } else if (pt.category === 'train' || nextPt.category === 'train') {
-            lineColor = '#2563eb'; // Deep Blue for Train/Shinkansen
+            lineColor = '#2563eb';
             weight = 4;
             legTitle = `🚆 Treno JR / Shinkansen (${pt.nameIt} ➔ ${nextPt.nameIt})`;
           } else if (pt.category === 'subway' || nextPt.category === 'subway') {
-            lineColor = '#06b6d4'; // Cyan for Metro
+            lineColor = '#06b6d4';
             weight = 4;
             legTitle = `🚇 Spostamento in Metropolitana (${pt.nameIt} ➔ ${nextPt.nameIt})`;
           } else if (pt.category === 'taxi' || nextPt.category === 'taxi') {
-            lineColor = '#f59e0b'; // Amber for Taxi
+            lineColor = '#f59e0b';
             weight = 4;
             legTitle = `🚕 Spostamento in Taxi/Navetta (${pt.nameIt} ➔ ${nextPt.nameIt})`;
           } else if (pt.category === 'walk' || nextPt.category === 'walk') {
-            lineColor = '#10b981'; // Emerald Green for Walking
+            lineColor = '#10b981';
             dashArray = '4, 4';
             weight = 3;
             legTitle = `🚶 Passeggiata a piedi (${pt.nameIt} ➔ ${nextPt.nameIt})`;
@@ -394,10 +403,10 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            🗺️ Mappa Principale Viaggio
+            🗺️ Mappa Command Center Operativa
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Mappa dinamica bilingue (Italiano / Locale) • Tutte le tappe ed i percorsi del giorno
+            Mappa dinamica bilingue (Italiano / Locale) • Marker cromatici per Hotel, Attrazioni, Cibo e Mezzi
           </p>
         </div>
 
@@ -414,14 +423,14 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
         </button>
       </div>
 
-      {/* Transport Legend */}
+      {/* Transport & Marker Legend */}
       <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-300 bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
-        <span className="text-slate-400">Legenda Mezzi:</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-1 bg-purple-500 rounded"></span> ✈️ Aereo</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-1 bg-blue-600 rounded"></span> 🚆 Treno JR/Shinkansen</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-1 bg-cyan-500 rounded"></span> 🚇 Metro</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-1 bg-amber-500 rounded"></span> 🚕 Taxi</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-1 bg-emerald-500 rounded"></span> 🚶 A Piedi</span>
+        <span className="text-slate-400 font-bold">Legenda Command Center:</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-blue-500 rounded-full"></span> 🏨 Hotel</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-indigo-500 rounded-full"></span> 📍 Attrazione</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-amber-500 rounded-full"></span> 🍜 Ristorante/Cibo</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-cyan-500 rounded-full"></span> 🚆 Spostamento</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-purple-500 rounded-full"></span> ✈️ Aereo</span>
       </div>
 
       {/* Manual Date Stepper Bar */}
@@ -467,7 +476,7 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
                 Tappa #{activePoint.stepNumber}
               </span>
               <span className="text-xl">
-                {activePoint.category === 'flight' ? '✈️' : activePoint.category === 'train' ? '🚆' : activePoint.category === 'subway' ? '🚇' : activePoint.category === 'taxi' ? '🚕' : activePoint.category === 'walk' ? '🚶' : '📍'}
+                {activePoint.category === 'flight' ? '✈️' : activePoint.category === 'train' ? '🚆' : activePoint.category === 'subway' ? '🚇' : activePoint.category === 'food' ? '🍜' : activePoint.category === 'hotel' ? '🏨' : '📍'}
               </span>
               <h4 className="font-bold text-white text-base">
                 {mapLang === 'LOCAL' ? activePoint.nameLocal : activePoint.nameIt}

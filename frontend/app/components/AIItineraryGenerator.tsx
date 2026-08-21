@@ -42,6 +42,7 @@ export default function AIItineraryGenerator({
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [addedPlacesMap, setAddedPlacesMap] = useState<Record<string, boolean>>({});
+  const [rejectedPlacesMap, setRejectedPlacesMap] = useState<Record<string, boolean>>({});
 
   // Interactive Modal & Live Navigation Assistant States
   const [activeModalItem, setActiveModalItem] = useState<AIItineraryItem | null>(null);
@@ -145,7 +146,6 @@ export default function AIItineraryGenerator({
     }
   };
 
-  // Manual Item Operations (Add / Delete / Reorder)
   const handleAddItemToDay = (dayNumber: number) => {
     const activityName = prompt('Inserisci la nuova tappa (es. Visita al Santuario Meiji o Aperitivo a Shinjuku):');
     if (!activityName || !activityName.trim()) return;
@@ -225,6 +225,10 @@ export default function AIItineraryGenerator({
     setAddedPlacesMap(prev => ({ ...prev, [suggestion.id]: true }));
   };
 
+  const handleRejectPlaceClick = (suggestionId: string) => {
+    setRejectedPlacesMap(prev => ({ ...prev, [suggestionId]: true }));
+  };
+
   const currentDaySchedule = itinerary?.days.find(d => d.dayNumber === selectedDay) || itinerary?.days[0];
 
   const handleStartNavigationToStep = (item: AIItineraryItem) => {
@@ -241,13 +245,13 @@ export default function AIItineraryGenerator({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 text-indigo-300 text-xs font-extrabold mb-2">
-            <span>✨ Diario & Concierge AI Step-by-Step</span>
+            <span>✨ Concierge Michelin & Wanderlog AI</span>
           </div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-white">
             📖 Diario di Viaggio & Assistente in Tempo Reale
           </h2>
           <p className="text-slate-400 text-xs md:text-sm mt-1">
-            Ogni spostamento è dettagliato con stazioni, linee metro, pronuncia Romaji e ciclo hotel quotidiano.
+            Clustering geografico dei quartieri, scheda gastronomica regionale e navigazione turn-by-turn.
           </p>
         </div>
 
@@ -411,12 +415,18 @@ export default function AIItineraryGenerator({
               {/* Day Header Card */}
               <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-950 to-slate-900 border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
                     <span className="px-2.5 py-0.5 text-[10px] font-extrabold bg-indigo-950 text-indigo-300 rounded-md border border-indigo-800/60">
                       📅 {currentDaySchedule.formattedDate || currentDaySchedule.date}
                     </span>
                     <span className="text-xs text-slate-400 font-semibold">
                       Giorno {currentDaySchedule.dayNumber}
+                    </span>
+                    <span className="px-2.5 py-0.5 text-[10px] font-extrabold bg-emerald-950 text-emerald-300 rounded-md border border-emerald-800/60">
+                      🧘 Stanchezza: {currentDaySchedule.fatigueScore || 3}/10 (Ottimale)
+                    </span>
+                    <span className="px-2.5 py-0.5 text-[10px] font-extrabold bg-amber-950 text-amber-300 rounded-md border border-amber-800/60">
+                      {currentDaySchedule.weatherForecast || 'Soleggiato ☀️'}
                     </span>
                   </div>
                   <h3 className="text-lg md:text-xl font-extrabold text-white">
@@ -537,13 +547,19 @@ export default function AIItineraryGenerator({
                               {item.time}
                             </span>
                             <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full border ${badgeBg}`}>
-                              {isPlace ? 'Attività Turistica' : isTransit ? 'Spostamento Step-by-Step' : isMeal ? 'Pasto Locale' : isHotelReturn ? 'Rientro Hotel' : 'Pausa'}
+                              {isPlace ? 'Attività Turistica' : isTransit ? 'Spostamento Step-by-Step' : isMeal ? 'Pasto Locale Michelin' : isHotelReturn ? 'Rientro Hotel' : 'Pausa'}
                             </span>
                           </div>
 
                           <h4 className="font-extrabold text-white text-base group-hover:text-indigo-300 transition-all">
                             {item.activity}
                           </h4>
+
+                          {item.recommendedDish && (
+                            <p className="text-xs text-amber-300 font-semibold mt-0.5">
+                              😋 Piatto Consigliato: {item.recommendedDish} (~{item.priceRangeEuros || 12}€)
+                            </p>
+                          )}
 
                           {item.transitDetail && (
                             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
@@ -577,42 +593,55 @@ export default function AIItineraryGenerator({
             </div>
           )}
 
-          {/* SUGGESTED NEW PLACES TO ADD */}
+          {/* SUGGESTED NEW PLACES TO ADD WITH ACCEPT / REJECT BUTTONS */}
           {itinerary.suggestedNewPlaces && itinerary.suggestedNewPlaces.length > 0 && (
             <div className="p-6 rounded-3xl bg-slate-950/60 border border-slate-800 space-y-4">
               <div className="flex items-center gap-2">
                 <span className="text-xl">✨</span>
-                <h3 className="text-lg font-bold text-white">Luoghi Suggeriti dall'AI per Completare il Viaggio</h3>
+                <h3 className="text-lg font-bold text-white">Attrazioni Suggerite dall'AI (Accetta / Snobba)</h3>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {itinerary.suggestedNewPlaces.map((sug) => {
                   const isAdded = addedPlacesMap[sug.id];
+                  const isRejected = rejectedPlacesMap[sug.id];
+
+                  if (isRejected) return null;
+
                   return (
                     <div key={sug.id} className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between space-y-3">
                       <div>
                         <div className="flex justify-between items-start">
-                          <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
-                            {sug.category}
+                          <span className="px-2.5 py-0.5 text-[10px] font-extrabold rounded bg-purple-950 text-purple-300 border border-purple-800">
+                            ✨ Suggerito da AI • {sug.category}
                           </span>
                           <span className="text-xs font-bold text-slate-400">📍 {sug.city}</span>
                         </div>
 
-                        <h4 className="font-extrabold text-white text-sm mt-2">{sug.name}</h4>
-                        <p className="text-xs text-slate-400 mt-1">{sug.reason}</p>
+                        <h4 className="font-extrabold text-white text-base mt-2">{sug.name}</h4>
+                        <p className="text-xs text-slate-300 mt-1 leading-relaxed">{sug.reason}</p>
                       </div>
 
-                      <button
-                        onClick={() => handleAddPlaceClick(sug)}
-                        disabled={isAdded}
-                        className={`w-full py-2 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                          isAdded
-                            ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/60'
-                            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md'
-                        }`}
-                      >
-                        {isAdded ? '✅ Aggiunto ai Luoghi' : '+ Aggiungi ai Miei Luoghi'}
-                      </button>
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                        <button
+                          onClick={() => handleAddPlaceClick(sug)}
+                          disabled={isAdded}
+                          className={`flex-1 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                            isAdded
+                              ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/60'
+                              : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md'
+                          }`}
+                        >
+                          {isAdded ? '✅ Aggiunto ai Luoghi' : '✅ Accetta & Aggiungi'}
+                        </button>
+
+                        <button
+                          onClick={() => handleRejectPlaceClick(sug.id)}
+                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+                        >
+                          ❌ Snobba
+                        </button>
+                      </div>
                     </div>
                   );
                 })}

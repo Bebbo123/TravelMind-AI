@@ -34,6 +34,14 @@ export interface AIItineraryItem {
   costEstimateYen?: number;
   feasibilityWarning?: string;
   transitType?: 'flight' | 'train' | 'subway' | 'taxi' | 'walk';
+  isAISuggested?: boolean;
+  restaurantName?: string;
+  cuisineType?: string;
+  recommendedDish?: string;
+  priceRangeEuros?: number;
+  districtFoodSpecialties?: string[];
+  fatigueLevel?: 'Basso (1-3)' | 'Medio (4-6)' | 'Intenso (7-9)';
+  weatherForecast?: 'Soleggiato ☀️' | 'Nuvoloso ⛅' | 'Pioggia ☔';
 }
 
 export interface AIDaySchedule {
@@ -133,8 +141,8 @@ Fornisci informazioni dettagliate e precise in formato JSON strictly senza markd
     const preferences = payload.preferences || {};
 
     const prompt = `
-Sei un pianificatore di viaggi esperto e concierge turistico internazionale.
-Organizza un itinerario COMPLETO PER TUTTI I GIORNI compresi tra le date specificate dall'utente.
+Sei un pianificatore di viaggi esperto, guida Michelin e concierge turistico internazionale.
+Organizza un itinerario PROFESSIONALE E Dettagliato PER TUTTI I GIORNI tra le date specificate.
 
 PREFERENZE UTENTE:
 - Data Inizio Viaggio: ${preferences.startDate || 'Non specificata'}
@@ -143,22 +151,16 @@ PREFERENZE UTENTE:
 - Interessi principali: ${(preferences.interests || []).join(', ') || 'Tutti'}
 - Note & Istruzioni Custom: ${preferences.customInstructions || 'Nessuna'}
 
-DATI REALI SALVATI DALL'UTENTE (ANALIZZA ATTENTAMENTE LE DATE DEGLI HOTEL E DEI VOLI):
+DATI REALI SALVATI DALL'UTENTE:
 VOLI SALVATI: ${JSON.stringify(tripData.flights || [])}
 ALLOGGI SALVATI: ${JSON.stringify(tripData.accommodations || [])}
 LUOGHI DA VISITARE SALVATI: ${JSON.stringify(tripData.places || [])}
 
-REGOLE TASSATIVE PER SPOSTAMENTI REALI TRA ALLOGGI & CITTÀ:
-1. GESTIONE CAMBIO HOTEL / CITTÀ: Analizza le date di check-in e check-out degli alloggi. Nei giorni in cui il soggiorno passa dall'Hotel A dell'Hotel B nella nuova città:
-   - Inserisci il Check-out da Hotel A alle 09:30.
-   - Inserisci lo SPOSTAMENTO REALE ED ESISTENTE (Nessuna proposta fittizia! Usare tratte ufficiali):
-     * Tokyo ➔ Kyoto: JR Tokaido Shinkansen Nozomi (Stazione di Tokyo ➔ Stazione di Kyoto, 2h 15m, ¥13.870)
-     * Kyoto ➔ Osaka: JR Special Rapid Line (Stazione di Kyoto ➔ Stazione di Osaka/Namba, 29m, ¥570)
-     * Aeroporto Taipei ➔ Taipei Centro: Taoyuan Airport MRT Express (35m, NT$160)
-     * Tokyo Centro ➔ Aeroporto Narita: JR Narita Express N'EX / Keisei Skyliner (50m, ¥3.070)
-     * Osaka Centro ➔ Aeroporto Kansai KIX: JR Haruka Express (50m, ¥1.800)
-   - Inserisci il Deposito Valigie / Check-in presso Hotel B ed il pomeriggio di visite nella nuova città.
-2. VOLI NOTTURNI SU 2 GIORNI: Se un volo parte la sera del Giorno 1 e atterra la mattina del Giorno 2, dividi la timeline tra il volo/scalo notturno (Giorno 1) e l'atterraggio/check-in hotel (Giorno 2).
+REGOLE TASSATIVE MICHELIN & CONCIERGE:
+1. CLUSTERING GEOGRAFICO QUARTIERI: Raggruppa le attrazioni della stessa zona (es. Cluster Asakusa: Tempio Senso-ji, Nakamise, Sumida Park, Skytree; Cluster Shibuya: Incrocio, Takeshita St, Meiji Jingu) nella stessa giornata per evitare spostamenti inutili a zigzag!
+2. CICLO HOTEL QUOTIDIANO: Ogni giornata inizia tassativamente con la partenza dall'hotel (08:00 Partenza Hotel) e termina con il rientro serale in hotel (21:30 Rientro Hotel).
+3. GASTRONOMIA DI QUARTIERE: Per ogni pasto indica il piatto consigliato (es. Ichiran Tonkotsu Ramen ~12€) ed i cibi tipici di quartiere (es. Asakusa: Melon Pan, Taiyaki; Osaka: Takoyaki, Okonomiyaki).
+4. TRADUZIONE BILINGUE STAZIONI: Formatta stazioni ed attrazioni come: Stazione di Shinjuku (新宿駅) [Shinjuku-eki], Tempio Senso-ji (浅草寺) [Asakusa-dera].
 
 Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
 {
@@ -175,13 +177,16 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
       "dailyFeasibilitySummary": "...",
       "timeline": [
         {
-          "time": "10:00 - 12:15",
+          "time": "08:00 - 08:30",
           "activity": "...",
           "type": "place | transit | meal | break",
           "transitType": "flight | train | subway | taxi | walk",
           "placeName": "...",
           "transitDetail": "...",
           "mealSuggestion": "...",
+          "recommendedDish": "...",
+          "priceRangeEuros": 12,
+          "districtFoodSpecialties": ["Melon Pan", "Taiyaki"],
           "costEstimateYen": 0,
           "feasibilityWarning": null
         }
@@ -225,8 +230,8 @@ SCHEDULE ATTUALE DEL GIORNO: ${JSON.stringify(req.currentDaySchedule)}
 DATI VIAGGIO: ${JSON.stringify(req.travelData)}
 
 Istruzioni:
-1. Rielabora la timeline della giornata mantenendo coerenza con gli spostamenti reali in treno Shinkansen o volo aereo.
-2. Associa attrazioni coerenti con la città in cui si trova l'utente per quel giorno.
+1. Rielabora la timeline della giornata mantenendo il raggruppamento per quartiere e la struttura del ciclo hotel.
+2. Inserisci alternative gastronomiche locali coerenti con la nuova zona.
 
 Restituisci ESCLUSIVAMENTE l'oggetto JSON della giornata rielaborata rispettando questo schema:
 {
