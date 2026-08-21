@@ -33,11 +33,13 @@ export interface AIItineraryItem {
   mealSuggestion?: string;
   costEstimateYen?: number;
   feasibilityWarning?: string;
+  transitType?: 'flight' | 'train' | 'bus' | 'walk';
 }
 
 export interface AIDaySchedule {
   dayNumber: number;
   date: string;
+  formattedDate: string;
   title: string;
   city: string;
   accommodationName?: string;
@@ -94,7 +96,7 @@ export class AIService {
     const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const isPlace = type === 'place';
     const prompt = `
-Sei un esperto di viaggi internazionali e concierge turistico per il Giappone.
+Sei un esperto di viaggi internazionali e concierge turistico.
 L'utente sta cercando ${isPlace ? 'un luogo da visitare / un\'attrazione' : 'un alloggio / hotel'}: "${query}".
 
 Fornisci informazioni dettagliate e precise in formato JSON strictly senza markdown extra:
@@ -102,7 +104,7 @@ Fornisci informazioni dettagliate e precise in formato JSON strictly senza markd
   "name": "Nome in italiano o principale",
   "officialNameJa": "Nome in kanji/caratteri locali se applicabile",
   "category": "${isPlace ? 'Santuario/Tempio | Ristorante/Cibo | Museo/Cultura | Quartiere/Shopping | Natura/Parco | Altro' : 'Hotel | Ryokan | Hostel | Appartamento'}",
-  "city": "Città (es. Tokyo, Kyoto, Osaka)",
+  "city": "Città (es. Tokyo, Kyoto, Taipei, Osaka)",
   "address": "Indirizzo completo leggibile",
   "openingHours": "${isPlace ? 'Orari di apertura' : 'N/A'}",
   "checkInTimes": "${!isPlace ? 'Check-in 15:00, Check-out 11:00' : 'N/A'}",
@@ -110,7 +112,7 @@ Fornisci informazioni dettagliate e precise in formato JSON strictly senza markd
   "phone": "+81 XX-XXXX-XXXX",
   "website": "https://...",
   "priority": "Alta | Media | Bassa",
-  "notes": "Consigli pratici e fermata metro più vicina."
+  "notes": "Consigli pratici e fermata più vicina."
 }
 `;
 
@@ -131,7 +133,7 @@ Fornisci informazioni dettagliate e precise in formato JSON strictly senza markd
     const preferences = payload.preferences || {};
 
     const prompt = `
-Sei un pianificatore di viaggi esperto in Giappone e valutatore di fattibilità.
+Sei un pianificatore di viaggi esperto e concierge turistico internazionale.
 Organizza un itinerario COMPLETO PER TUTTI I GIORNI compresi tra le date specificate dall'utente.
 
 PREFERENZE UTENTE:
@@ -141,26 +143,22 @@ PREFERENZE UTENTE:
 - Interessi principali: ${(preferences.interests || []).join(', ') || 'Tutti'}
 - Note & Istruzioni Custom: ${preferences.customInstructions || 'Nessuna'}
 
-DATI REALI SALVATI DALL'UTENTE:
+DATI REALI SALVATI DALL'UTENTE (ANALIZZA ATTENTAMENTE LE DATE E GLI ORARI DEI VOLI):
 VOLI SALVATI: ${JSON.stringify(tripData.flights || [])}
 ALLOGGI SALVATI: ${JSON.stringify(tripData.accommodations || [])}
 LUOGHI DA VISITARE SALVATI: ${JSON.stringify(tripData.places || [])}
 
-REGOLE FONDAMENTALI SULLA GESTIONE DEI VOLI, SCALI E VOLI NOTTURNI:
-1. RICONOSCIMENTO SCALI & VOLI CON COINCIDENZA: Analizza attentamente tutti i voli salvati. Se l'utente ha più tratte di andata (es. Milano ➔ Abu Dhabi e poi Abu Dhabi ➔ Tokyo), NON confondere le tratte intermedie con l'atterraggio finale a destinazione.
-   - Identifica la partenza iniziale dal paese di origine.
-   - Mostra nella timeline del Giorno 1 le tratte intermedie, la durata dello scalo in aeroporto e l'atterraggio FINALE a destinazione.
-2. VOLI NOTTURNI (OVERNIGHT FLIGHTS): Se un volo parte la sera/notte (es. ore 21:00 o 23:00 del Giorno 1) e atterra il giorno successivo (+1 giorno), NON programmare visite guidate o attività in città durante la notte mentre l'utente si trova in volo!
-   - Nella timeline del Giorno 1 mostra: "Partenza Volo Intercontinentale Notturno ✈️ - Pernottamento e riposo a bordo dell'aereo".
-   - Le attività turistiche ed il trasferimento in hotel devono iniziare SOLTANTO dopo l'orario e la data REALE di atterraggio finale a destinazione nel Giorno 2.
-3. SPOSTAMENTO AEROPORTO ➔ HOTEL: Nel giorno di arrivo REALE a destinazione, includi nella timeline l'orario e il mezzo esatto per andare dall'aeroporto di arrivo (es. Haneda/Narita) al primo hotel.
-4. SPOSTAMENTO HOTEL ➔ HOTEL (CAMBIO CITTÀ): Nei giorni di cambio alloggio (es. da Tokyo a Kyoto), includi la timeline del Check-out, il trasferimento alla Stazione, il treno Shinkansen e il check-in nel nuovo hotel.
-5. SPOSTAMENTO HOTEL ➔ AEROPORTO: Nel giorno di partenza di ritorno, calcola il trasferimento dall'ultimo hotel all'aeroporto con almeno 3 ore di anticipo.
+REGOLE TASSATIVE SUI VOLI INTERMEDI E COINCIDENZE:
+1. OGNI VOLO DEVE ESSERE INSERITO NELLA DATA E NEGLI ORARI ESATTI IN CUI AVVIENE:
+   - Se l'utente ha un volo il 27/10/2026 dalle 06:40 alle 10:40 (es. da Taipei TPE a Tokyo Narita NRT), il 27/10/2026 DEVE essere inserito il VOLO AEREO nella timeline del mattino!
+   - NON inserire MAI passeggiate in città o visite ai musei mentre l'utente si trova in volo o in aeroporto!
+   - NON confondere le città: attrazioni di Tokyo (es. Edo Tokyo Open Air Museum) devono essere assegnate a TOKYO e MAI a Taipei!
+2. SPOSTAMENTI AEROPORTO ➔ HOTEL: Subito dopo l'atterraggio ad un aeroporto di arrivo/destinazione, la timeline DEVE includere il trasferimento dall'aeroporto all'hotel ed il check-in/deposito valigie prima delle visite turistiche.
+3. SCALI INTERMEDI: Se un volo contiene scali (layovers), mostra il tempo di attesa in aeroporto prima del volo successivo.
 
 Istruzioni di Generazione:
 1. Genera l'itinerario per OGNI giorno tra la data inizio e fine (Giorno 1 ... Giorno N).
-2. Per ogni giorno includi timeline oraria coerente con la presenza o meno dei voli.
-3. Fornisci 3 o 4 suggerimenti di "suggestedNewPlaces" extra vicini alle tappe visitate ma non ancora salvati.
+2. Ogni giorno deve contenere la data esatta in formato ISO YYYY-MM-DD.
 
 Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
 {
@@ -170,15 +168,17 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
     {
       "dayNumber": 1,
       "date": "YYYY-MM-DD",
-      "title": "Giorno 1: ...",
-      "city": "Tokyo",
-      "accommodationName": "Hotel...",
+      "formattedDate": "DD/MM/YYYY",
+      "title": "...",
+      "city": "...",
+      "accommodationName": "...",
       "dailyFeasibilitySummary": "...",
       "timeline": [
         {
-          "time": "09:00 - 10:00",
+          "time": "06:40 - 10:40",
           "activity": "...",
           "type": "place | transit | meal | break",
+          "transitType": "flight | train | bus | walk",
           "placeName": "...",
           "transitDetail": "...",
           "mealSuggestion": "...",
@@ -217,31 +217,33 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
     const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `
-Sei un concierge turistico AI in tempo reale per viaggiatori in Giappone.
-L'utente si trova a metà giornata durante il viaggio ed ha inviato questa richiesta di MODIFICA AL VOLO per il Giorno ${req.dayNumber} (${req.date}):
+Sei un concierge turistico AI in tempo reale.
+L'utente si trova durante il viaggio ed ha inviato questa richiesta di MODIFICA AL VOLO per il giorno ${req.date}:
 
 RICHESTA UTENTE AL VOLO: "${req.userPrompt}"
 SCHEDULE ATTUALE DEL GIORNO: ${JSON.stringify(req.currentDaySchedule)}
 DATI VIAGGIO: ${JSON.stringify(req.travelData)}
 
 Istruzioni:
-1. Rielabora l'intera timeline della giornata rispettando la richiesta dell'utente (es. se ha finito prima, aggiungi attrazioni flash vicine; se è stanco, alleggerisci il programma; se piove, sostituisci con luoghi al coperto; se chiede di sostituire un luogo, trova un'alternativa eccellente).
-2. Mantieni sempre chiari gli spostamenti essenziali verso l'hotel o la stazione.
-3. Valuta la nuova fattibilità e aggiorna "dailyFeasibilitySummary" e gli avvisi "feasibilityWarning" nella timeline.
+1. Rielabora l'intera timeline della giornata rispettando la richiesta dell'utente.
+2. Mantieni inalterati i voli aerei e gli spostamenti fondamentali previsti per quella data.
+3. Riassegna le attrazioni solo alle città corrette in cui si trova l'utente.
 
 Restituisci ESCLUSIVAMENTE l'oggetto JSON della giornata rielaborata rispettando questo schema:
 {
   "dayNumber": ${req.dayNumber},
   "date": "${req.date}",
-  "title": "Giorno ${req.dayNumber}: (Titolo aggiornato)",
+  "formattedDate": "${req.currentDaySchedule.formattedDate || req.date}",
+  "title": "...",
   "city": "${req.currentDaySchedule.city}",
   "accommodationName": "${req.currentDaySchedule.accommodationName || ''}",
-  "dailyFeasibilitySummary": "Nuova valutazione di fattibilità post-modifica...",
+  "dailyFeasibilitySummary": "...",
   "timeline": [
     {
       "time": "...",
       "activity": "...",
       "type": "place | transit | meal | break",
+      "transitType": "flight | train | bus | walk",
       "placeName": "...",
       "transitDetail": "...",
       "mealSuggestion": "...",
