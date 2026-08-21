@@ -8,6 +8,7 @@ import {
   inferTripDates,
   AIItineraryResponse, 
   AIDaySchedule,
+  AIItineraryItem,
   AIPlaceSuggestion,
   TripPreferences 
 } from '../utils/aiItinerary';
@@ -16,6 +17,8 @@ import { loadSavedItinerary, saveSavedItinerary, clearSavedItinerary } from '../
 interface AIItineraryGeneratorProps {
   travelData: TravelData;
   onAddSuggestedPlace: (place: PlaceToVisit) => void;
+  onItineraryChange?: (itinerary: AIItineraryResponse | null) => void;
+  onSelectDayChange?: (dayNumber: number) => void;
 }
 
 const AVAILABLE_INTERESTS = [
@@ -27,7 +30,12 @@ const AVAILABLE_INTERESTS = [
   '🌃 Vita Notturna'
 ];
 
-export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }: AIItineraryGeneratorProps) {
+export default function AIItineraryGenerator({ 
+  travelData, 
+  onAddSuggestedPlace,
+  onItineraryChange,
+  onSelectDayChange 
+}: AIItineraryGeneratorProps) {
   const [itinerary, setItinerary] = useState<AIItineraryResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number>(1);
@@ -52,11 +60,18 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
     const saved = loadSavedItinerary();
     if (saved) {
       setItinerary(saved);
+      if (onItineraryChange) onItineraryChange(saved);
       if (saved.days && saved.days.length > 0) {
         setSelectedDay(saved.days[0].dayNumber);
+        if (onSelectDayChange) onSelectDayChange(saved.days[0].dayNumber);
       }
     }
   }, [travelData]);
+
+  const handleSelectDay = (dayNumber: number) => {
+    setSelectedDay(dayNumber);
+    if (onSelectDayChange) onSelectDayChange(dayNumber);
+  };
 
   const toggleInterest = (interest: string) => {
     if (selectedInterests.includes(interest)) {
@@ -79,9 +94,11 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
       const result = await generateAIItinerary(travelData, prefs);
       setItinerary(result);
       saveSavedItinerary(result);
+      if (onItineraryChange) onItineraryChange(result);
 
       if (result.days && result.days.length > 0) {
         setSelectedDay(result.days[0].dayNumber);
+        if (onSelectDayChange) onSelectDayChange(result.days[0].dayNumber);
       }
     } catch (err) {
       alert('Impossibile generare l\'itinerario al momento.');
@@ -112,6 +129,7 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
         };
         setItinerary(updatedItinerary);
         saveSavedItinerary(updatedItinerary);
+        if (onItineraryChange) onItineraryChange(updatedItinerary);
       }
 
       setReplanPromptMap(prev => ({ ...prev, [day.dayNumber]: '' }));
@@ -122,10 +140,55 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
     }
   };
 
+  const handleDeleteTimelineItem = (dayNumber: number, itemIndex: number) => {
+    if (!itinerary) return;
+    const updatedDays = itinerary.days.map(d => {
+      if (d.dayNumber === dayNumber) {
+        const newTimeline = [...d.timeline];
+        newTimeline.splice(itemIndex, 1);
+        return { ...d, timeline: newTimeline };
+      }
+      return d;
+    });
+    const updatedItinerary: AIItineraryResponse = { ...itinerary, days: updatedDays };
+    setItinerary(updatedItinerary);
+    saveSavedItinerary(updatedItinerary);
+    if (onItineraryChange) onItineraryChange(updatedItinerary);
+  };
+
+  const handleAddManualItem = (dayNumber: number) => {
+    const time = prompt('Orario della tappa (es. 15:30 - 17:00):', '15:30 - 17:00');
+    if (!time) return;
+    const activity = prompt('Nome del luogo / Attività:', 'Visita al quartiere Akihabara');
+    if (!activity) return;
+    const detail = prompt('Dettagli / Spostamento / Suggerimenti (opzionale):', 'Mezzo: Metro Ginza Line');
+
+    if (!itinerary) return;
+    const newItem: AIItineraryItem = {
+      time,
+      activity,
+      type: 'place',
+      placeName: activity,
+      transitDetail: detail || undefined
+    };
+
+    const updatedDays = itinerary.days.map(d => {
+      if (d.dayNumber === dayNumber) {
+        return { ...d, timeline: [...d.timeline, newItem] };
+      }
+      return d;
+    });
+    const updatedItinerary: AIItineraryResponse = { ...itinerary, days: updatedDays };
+    setItinerary(updatedItinerary);
+    saveSavedItinerary(updatedItinerary);
+    if (onItineraryChange) onItineraryChange(updatedItinerary);
+  };
+
   const handleClearItinerary = () => {
     if (confirm('Vuoi azzerare il Diario di Viaggio registrato e rigenerarlo da capo?')) {
       clearSavedItinerary();
       setItinerary(null);
+      if (onItineraryChange) onItineraryChange(null);
     }
   };
 
@@ -156,7 +219,7 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
             <span>📖 Diario di Viaggio Registrato & Persistente</span>
             {itinerary && (
               <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px]">
-                Salvato in memoria • Riapribile Sempre
+                Sincronizzato con la Mappa • Salvato sul Dispositivo
               </span>
             )}
           </div>
@@ -164,7 +227,7 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
             Diario di Viaggio & Concierge al Volo
           </h3>
           <p className="text-slate-400 text-xs md:text-sm mt-1">
-            L'itinerario rimane salvato nel tuo dispositivo. Consulta le tue tappe e rielaborale in tempo reale in qualsiasi momento.
+            L'itinerario rimane salvato sul tuo dispositivo. Puoi aggiungere o eliminare manualemente qualsiasi tappa e la Mappa ricalcolerà la rotta in automatico.
           </p>
         </div>
 
@@ -205,7 +268,6 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
         </h4>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
-          {/* Dates */}
           <div>
             <label className="block text-slate-400 mb-1 font-semibold">Data Inizio Viaggio</label>
             <input
@@ -226,7 +288,6 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
             />
           </div>
 
-          {/* Pace */}
           <div>
             <label className="block text-slate-400 mb-1 font-semibold">Ritmo di Viaggio</label>
             <select
@@ -273,7 +334,7 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
           </label>
           <textarea
             rows={2}
-            placeholder="es. Viaggio con bambini, vorrei mangiare tanto ramen, poche scalinate faticose, preferisco i templi al mattino presto..."
+            placeholder="es. Viaggio con bambini, vorrei mangiare tanto ramen, poche scalinate faticose..."
             value={customInstructions}
             onChange={e => setCustomInstructions(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white text-xs focus:outline-none focus:border-indigo-500"
@@ -284,12 +345,12 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
       {/* Initial Prompt State if not generated yet */}
       {!itinerary && !isLoading && (
         <div className="p-8 text-center bg-slate-900/60 rounded-2xl border border-slate-800 text-slate-400 text-xs md:text-sm space-y-3">
-          <div className="text-4xl">📖 🗓️ 🍱</div>
+          <div className="text-4xl">📖 🗓️ 🗺️</div>
           <p className="font-semibold text-slate-200">
             Nessun Diario di Viaggio registrato al momento.
           </p>
           <p className="max-w-xl mx-auto text-slate-400 leading-relaxed text-xs">
-            Clicca su <strong className="text-indigo-300">"✨ Genera Diario di Viaggio AI"</strong> per creare il tuo piano dal <strong className="text-indigo-300">{startDate}</strong> al <strong className="text-indigo-300">{endDate}</strong>. Una volta generato, rimarrà salvato e consultabile sempre sul tuo dispositivo!
+            Clicca su <strong className="text-indigo-300">"✨ Genera Diario di Viaggio AI"</strong> per creare il tuo piano registrato dal <strong className="text-indigo-300">{startDate}</strong> al <strong className="text-indigo-300">{endDate}</strong>.
           </p>
         </div>
       )}
@@ -298,12 +359,7 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
       {isLoading && (
         <div className="p-8 text-center bg-slate-900/40 rounded-2xl border border-indigo-500/20 text-slate-300 text-xs md:text-sm space-y-4 animate-pulse">
           <div className="text-3xl animate-bounce">🤖</div>
-          <p className="font-bold text-indigo-400">Generazione e salvataggio del Diario di Viaggio in corso ({startDate} ➔ {endDate})...</p>
-          <div className="max-w-md mx-auto space-y-2 text-slate-500 text-xs">
-            <div>✓ Creazione timeline per tutti i giorni</div>
-            <div>✓ Inserimento trasferimenti aeroporto, cambio hotel e pause cibo</div>
-            <div>✓ Salvataggio in memoria locale per accesso offline permanente</div>
-          </div>
+          <p className="font-bold text-indigo-400">Generazione e sincronizzazione del Diario di Viaggio in corso ({startDate} ➔ {endDate})...</p>
         </div>
       )}
 
@@ -339,7 +395,7 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
             {itinerary.days.map((day) => (
               <button
                 key={day.dayNumber}
-                onClick={() => setSelectedDay(day.dayNumber)}
+                onClick={() => handleSelectDay(day.dayNumber)}
                 className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 ${
                   selectedDay === day.dayNumber
                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
@@ -361,17 +417,22 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
               return (
                 <div key={day.dayNumber} className="space-y-6">
                   
-                  {/* Day Header Info */}
-                  <div className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row justify-between md:items-center gap-2">
+                  {/* Day Header Info & Manual Add Button */}
+                  <div className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row justify-between md:items-center gap-4">
                     <div>
                       <h4 className="text-lg font-bold text-white">{day.title}</h4>
                       <p className="text-xs text-slate-400 mt-0.5">
                         📅 Data: <strong className="text-slate-200">{day.date}</strong> • Città: <strong className="text-indigo-400">{day.city}</strong> {day.accommodationName ? `• Hotel: ${day.accommodationName}` : ''}
                       </p>
                     </div>
-                    <div className="text-xs font-medium text-slate-300 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-                      💡 {day.dailyFeasibilitySummary}
-                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleAddManualItem(day.dayNumber)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5 self-start md:self-auto cursor-pointer"
+                    >
+                      ➕ Aggiungi Tappa Manuale
+                    </button>
                   </div>
 
                   {/* REAL-TIME ON-THE-FLY CONCIERGE ASSISTANT FOR THIS DAY */}
@@ -438,7 +499,7 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
                     </div>
                   </div>
 
-                  {/* Timeline Items */}
+                  {/* Timeline Items with Delete & Manual Edit */}
                   <div className="space-y-3 relative before:absolute before:left-6 before:top-4 before:bottom-4 before:w-0.5 before:bg-slate-800">
                     {day.timeline.map((item, idx) => (
                       <div 
@@ -460,7 +521,7 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
                         </div>
 
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                          <div>
+                          <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-xs font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-800/60 px-2 py-0.5 rounded-md">
                                 {item.time}
@@ -482,11 +543,22 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
                             )}
                           </div>
 
-                          {item.costEstimateYen !== undefined && (
-                            <span className="text-xs font-bold text-emerald-400 bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-800/40 self-start md:self-auto">
-                              ¥{item.costEstimateYen.toLocaleString()}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-2 self-start md:self-auto">
+                            {item.costEstimateYen !== undefined && (
+                              <span className="text-xs font-bold text-emerald-400 bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-800/40">
+                                ¥{item.costEstimateYen.toLocaleString()}
+                              </span>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTimelineItem(day.dayNumber, idx)}
+                              className="p-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-800/40 text-xs transition-all cursor-pointer"
+                              title="Elimina questa tappa dal diario"
+                            >
+                              🗑️
+                            </button>
+                          </div>
                         </div>
 
                         {item.feasibilityWarning && (
