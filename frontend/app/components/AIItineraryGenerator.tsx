@@ -11,6 +11,7 @@ import {
   AIPlaceSuggestion,
   TripPreferences 
 } from '../utils/aiItinerary';
+import { loadSavedItinerary, saveSavedItinerary, clearSavedItinerary } from '../utils/travelStorage';
 
 interface AIItineraryGeneratorProps {
   travelData: TravelData;
@@ -47,6 +48,14 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
     const inferred = inferTripDates(travelData);
     setStartDate(inferred.startDate);
     setEndDate(inferred.endDate);
+
+    const saved = loadSavedItinerary();
+    if (saved) {
+      setItinerary(saved);
+      if (saved.days && saved.days.length > 0) {
+        setSelectedDay(saved.days[0].dayNumber);
+      }
+    }
   }, [travelData]);
 
   const toggleInterest = (interest: string) => {
@@ -69,6 +78,8 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
       };
       const result = await generateAIItinerary(travelData, prefs);
       setItinerary(result);
+      saveSavedItinerary(result);
+
       if (result.days && result.days.length > 0) {
         setSelectedDay(result.days[0].dayNumber);
       }
@@ -95,10 +106,12 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
       );
 
       if (itinerary) {
-        setItinerary({
+        const updatedItinerary: AIItineraryResponse = {
           ...itinerary,
           days: itinerary.days.map(d => d.dayNumber === day.dayNumber ? updatedDay : d)
-        });
+        };
+        setItinerary(updatedItinerary);
+        saveSavedItinerary(updatedItinerary);
       }
 
       setReplanPromptMap(prev => ({ ...prev, [day.dayNumber]: '' }));
@@ -106,6 +119,13 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
       alert('Impossibile rielaborare la giornata al momento.');
     } finally {
       setIsReplanningDayMap(prev => ({ ...prev, [day.dayNumber]: false }));
+    }
+  };
+
+  const handleClearItinerary = () => {
+    if (confirm('Vuoi azzerare il Diario di Viaggio registrato e rigenerarlo da capo?')) {
+      clearSavedItinerary();
+      setItinerary(null);
     }
   };
 
@@ -133,32 +153,49 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
         <div>
           <div className="flex items-center gap-2 mb-1 text-xs font-bold text-indigo-400 uppercase tracking-wider">
-            <span>✨ Real-Time AI Concierge & Multi-Day Planner</span>
+            <span>📖 Diario di Viaggio Registrato & Persistente</span>
+            {itinerary && (
+              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px]">
+                Salvato in memoria • Riapribile Sempre
+              </span>
+            )}
           </div>
           <h3 className="text-2xl md:text-3xl font-extrabold text-white">
-            Pianificatore Itinerario, Fattibilità & Concierge al Volo
+            Diario di Viaggio & Concierge al Volo
           </h3>
           <p className="text-slate-400 text-xs md:text-sm mt-1">
-            Personalizza le date del viaggio, imposta il tuo stile e rielabora qualsiasi giornata in tempo reale se sei stanco o hai finito prima.
+            L'itinerario rimane salvato nel tuo dispositivo. Consulta le tue tappe e rielaborale in tempo reale in qualsiasi momento.
           </p>
         </div>
 
-        <button
-          onClick={handleGenerate}
-          disabled={isLoading}
-          className="px-6 py-3.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold rounded-2xl text-xs md:text-sm shadow-xl shadow-indigo-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 self-start md:self-auto cursor-pointer"
-        >
-          {isLoading ? (
-            <>
-              <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></span>
-              Generazione Tutti i Giorni...
-            </>
-          ) : (
-            <>
-              <span>✨ Genera Itinerario Completo & Fattibilità</span>
-            </>
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          {itinerary && (
+            <button
+              onClick={handleClearItinerary}
+              className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-2xl text-xs transition-all border border-slate-700"
+              title="Azzera Diario Salvato"
+            >
+              🗑️ Azzera Diario
+            </button>
           )}
-        </button>
+
+          <button
+            onClick={handleGenerate}
+            disabled={isLoading}
+            className="px-6 py-3.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold rounded-2xl text-xs md:text-sm shadow-xl shadow-indigo-500/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            {isLoading ? (
+              <>
+                <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></span>
+                Generazione Diario in corso...
+              </>
+            ) : (
+              <>
+                <span>{itinerary ? '🔄 Rigenera Diario di Viaggio' : '✨ Genera Diario di Viaggio AI'}</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Preferences & Trip Dates Setup Drawer */}
@@ -247,12 +284,12 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
       {/* Initial Prompt State if not generated yet */}
       {!itinerary && !isLoading && (
         <div className="p-8 text-center bg-slate-900/60 rounded-2xl border border-slate-800 text-slate-400 text-xs md:text-sm space-y-3">
-          <div className="text-4xl">🗓️ 🚇 🍱</div>
+          <div className="text-4xl">📖 🗓️ 🍱</div>
           <p className="font-semibold text-slate-200">
-            Pronto a pianificare tutti i giorni del tuo viaggio in Giappone?
+            Nessun Diario di Viaggio registrato al momento.
           </p>
           <p className="max-w-xl mx-auto text-slate-400 leading-relaxed text-xs">
-            L'AI creerà l'agenda giorno per giorno per l'intera durata dal <strong className="text-indigo-300">{startDate}</strong> al <strong className="text-indigo-300">{endDate}</strong>, valutando la fattibilità e fornendoti l'assistente al volo per le modifiche durante il viaggio!
+            Clicca su <strong className="text-indigo-300">"✨ Genera Diario di Viaggio AI"</strong> per creare il tuo piano dal <strong className="text-indigo-300">{startDate}</strong> al <strong className="text-indigo-300">{endDate}</strong>. Una volta generato, rimarrà salvato e consultabile sempre sul tuo dispositivo!
           </p>
         </div>
       )}
@@ -261,16 +298,16 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
       {isLoading && (
         <div className="p-8 text-center bg-slate-900/40 rounded-2xl border border-indigo-500/20 text-slate-300 text-xs md:text-sm space-y-4 animate-pulse">
           <div className="text-3xl animate-bounce">🤖</div>
-          <p className="font-bold text-indigo-400">L'AI sta calcolando tutti i giorni del tuo viaggio ({startDate} ➔ {endDate})...</p>
+          <p className="font-bold text-indigo-400">Generazione e salvataggio del Diario di Viaggio in corso ({startDate} ➔ {endDate})...</p>
           <div className="max-w-md mx-auto space-y-2 text-slate-500 text-xs">
-            <div>✓ Lettura voli, alloggi e lista desideri</div>
-            <div>✓ Applicazione preferenze di ritmo ({pace})</div>
-            <div>✓ Generazione spostamenti treni/metro e pause cibo</div>
+            <div>✓ Creazione timeline per tutti i giorni</div>
+            <div>✓ Inserimento trasferimenti aeroporto, cambio hotel e pause cibo</div>
+            <div>✓ Salvataggio in memoria locale per accesso offline permanente</div>
           </div>
         </div>
       )}
 
-      {/* Generated Itinerary Content */}
+      {/* Generated & Persisted Itinerary Content */}
       {itinerary && !isLoading && (
         <div className="space-y-8 animate-fadeIn">
           
@@ -285,7 +322,7 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <span className="font-extrabold uppercase text-xs tracking-wider">
-                  Fattibilità Globale Viaggio ({itinerary.days.length} Giorni):
+                  Diario Registrato • Fattibilità Globale ({itinerary.days.length} Giorni):
                 </span>
                 <span className="px-3 py-0.5 rounded-full text-xs font-black bg-black/40 border border-current">
                   {itinerary.globalFeasibilityRating}
@@ -345,7 +382,7 @@ export default function AIItineraryGenerator({ travelData, onAddSuggestedPlace }
                       </div>
                       {isReplanning && (
                         <span className="text-xs text-amber-300 animate-pulse font-bold">
-                          Rielaborazione in corso...
+                          Rielaborazione e salvataggio in corso...
                         </span>
                       )}
                     </div>

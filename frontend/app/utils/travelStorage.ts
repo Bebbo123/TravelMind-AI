@@ -1,6 +1,8 @@
 import { TravelData, FlightTicket, Accommodation, PlaceToVisit } from '../types/travel';
+import { AIItineraryResponse } from './aiItinerary';
 
 const STORAGE_KEY = 'travelmind_trip_data_v1';
+const STORAGE_ITINERARY_KEY = 'travelmind_saved_itinerary_v1';
 
 export const initialTravelData: TravelData = {
   flights: [
@@ -109,5 +111,37 @@ export function saveTravelData(data: TravelData): void {
 export function resetTravelData(): TravelData {
   if (typeof window === 'undefined') return initialTravelData;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(initialTravelData));
+  localStorage.removeItem(STORAGE_ITINERARY_KEY);
   return initialTravelData;
+}
+
+// --- Travel Diary / Saved Itinerary Storage Functions ---
+export function loadSavedItinerary(): AIItineraryResponse | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_ITINERARY_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as AIItineraryResponse;
+  } catch (err) {
+    console.error('Error loading saved itinerary:', err);
+    return null;
+  }
+}
+
+export function saveSavedItinerary(itinerary: AIItineraryResponse): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_ITINERARY_KEY, JSON.stringify(itinerary));
+  } catch (err) {
+    console.error('Error saving itinerary:', err);
+  }
+}
+
+export function clearSavedItinerary(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_ITINERARY_KEY);
+  } catch (err) {
+    console.error('Error clearing saved itinerary:', err);
+  }
 }
