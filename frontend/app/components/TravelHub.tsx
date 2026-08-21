@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { TravelData, FlightTicket, Accommodation, PlaceToVisit } from '../types/travel';
 import { loadTravelData, saveTravelData, resetTravelData } from '../utils/travelStorage';
+import { searchWithAI, AISearchResult } from '../utils/aiSearch';
 
 type ActiveTab = 'flights' | 'accommodations' | 'places';
 
@@ -19,6 +20,13 @@ export default function TravelHub() {
   const [editingFlightId, setEditingFlightId] = useState<string | null>(null);
   const [editingAccId, setEditingAccId] = useState<string | null>(null);
   const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
+
+  // AI Search & Confirmation States
+  const [aiPlaceQuery, setAiPlaceQuery] = useState('');
+  const [aiAccQuery, setAiAccQuery] = useState('');
+  const [isAISearching, setIsAISearching] = useState(false);
+  const [aiPendingPlaceResult, setAiPendingPlaceResult] = useState<AISearchResult | null>(null);
+  const [aiPendingAccResult, setAiPendingAccResult] = useState<AISearchResult | null>(null);
 
   // New/Edit Flight Form State
   const [newFlight, setNewFlight] = useState<Partial<FlightTicket>>({
@@ -77,6 +85,75 @@ export default function TravelHub() {
     }
   };
 
+  // --- AI Search Handlers ---
+  const handleAISearchPlace = async () => {
+    if (!aiPlaceQuery.trim()) return;
+    setIsAISearching(true);
+    setAiPendingPlaceResult(null);
+    try {
+      const res = await searchWithAI(aiPlaceQuery, 'place');
+      setAiPendingPlaceResult(res);
+    } catch (err) {
+      alert('Impossibile recuperare i dati con l\'AI al momento.');
+    } finally {
+      setIsAISearching(false);
+    }
+  };
+
+  const handleConfirmAIPlace = () => {
+    if (!aiPendingPlaceResult) return;
+    setNewPlace(prev => ({
+      ...prev,
+      name: aiPendingPlaceResult.name + (aiPendingPlaceResult.officialNameJa ? ` (${aiPendingPlaceResult.officialNameJa})` : ''),
+      category: (aiPendingPlaceResult.category as any) || 'Santuario/Tempio',
+      city: aiPendingPlaceResult.city || 'Tokyo',
+      address: aiPendingPlaceResult.address || '',
+      priority: aiPendingPlaceResult.priority || 'Alta',
+      notes: [
+        aiPendingPlaceResult.notes,
+        aiPendingPlaceResult.openingHours ? `Orari: ${aiPendingPlaceResult.openingHours}` : '',
+        aiPendingPlaceResult.phone ? `Tel: ${aiPendingPlaceResult.phone}` : '',
+        aiPendingPlaceResult.website ? `Sito: ${aiPendingPlaceResult.website}` : ''
+      ].filter(Boolean).join('\n'),
+      estimatedCostYen: aiPendingPlaceResult.estimatedCostYen || 0
+    }));
+    setAiPendingPlaceResult(null);
+    setAiPlaceQuery('');
+  };
+
+  const handleAISearchAcc = async () => {
+    if (!aiAccQuery.trim()) return;
+    setIsAISearching(true);
+    setAiPendingAccResult(null);
+    try {
+      const res = await searchWithAI(aiAccQuery, 'accommodation');
+      setAiPendingAccResult(res);
+    } catch (err) {
+      alert('Impossibile recuperare i dati con l\'AI al momento.');
+    } finally {
+      setIsAISearching(false);
+    }
+  };
+
+  const handleConfirmAIAcc = () => {
+    if (!aiPendingAccResult) return;
+    setNewAcc(prev => ({
+      ...prev,
+      name: aiPendingAccResult.name + (aiPendingAccResult.officialNameJa ? ` (${aiPendingAccResult.officialNameJa})` : ''),
+      city: aiPendingAccResult.city || 'Tokyo',
+      address: aiPendingAccResult.address || '',
+      cost: aiPendingAccResult.estimatedCostYen,
+      notes: [
+        aiPendingAccResult.notes,
+        aiPendingAccResult.checkInTimes ? `${aiPendingAccResult.checkInTimes}` : '',
+        aiPendingAccResult.phone ? `Tel: ${aiPendingAccResult.phone}` : '',
+        aiPendingAccResult.website ? `Sito: ${aiPendingAccResult.website}` : ''
+      ].filter(Boolean).join('\n')
+    }));
+    setAiPendingAccResult(null);
+    setAiAccQuery('');
+  };
+
   // --- Flight Operations ---
   const handleOpenAddFlight = () => {
     setEditingFlightId(null);
@@ -119,7 +196,6 @@ export default function TravelHub() {
     if (!data || !newFlight.flightNumber || !newFlight.origin || !newFlight.destination) return;
 
     if (editingFlightId) {
-      // Editing existing flight
       const updatedFlights = data.flights.map(f => {
         if (f.id === editingFlightId) {
           return {
@@ -142,7 +218,6 @@ export default function TravelHub() {
 
       updateData({ ...data, flights: updatedFlights });
     } else {
-      // Creating new flight
       const flight: FlightTicket = {
         id: 'f_' + Date.now(),
         airline: newFlight.airline || 'Compagnia Aerea',
@@ -178,6 +253,8 @@ export default function TravelHub() {
   // --- Accommodation Operations ---
   const handleOpenAddAcc = () => {
     setEditingAccId(null);
+    setAiAccQuery('');
+    setAiPendingAccResult(null);
     setNewAcc({
       name: '',
       address: '',
@@ -194,6 +271,8 @@ export default function TravelHub() {
 
   const handleOpenEditAcc = (acc: Accommodation) => {
     setEditingAccId(acc.id);
+    setAiAccQuery('');
+    setAiPendingAccResult(null);
     setNewAcc({
       name: acc.name,
       address: acc.address,
@@ -213,7 +292,6 @@ export default function TravelHub() {
     if (!data || !newAcc.name || !newAcc.checkIn || !newAcc.checkOut) return;
 
     if (editingAccId) {
-      // Editing existing accommodation
       const updatedAccs = data.accommodations.map(a => {
         if (a.id === editingAccId) {
           return {
@@ -234,7 +312,6 @@ export default function TravelHub() {
 
       updateData({ ...data, accommodations: updatedAccs });
     } else {
-      // Creating new accommodation
       const acc: Accommodation = {
         id: 'a_' + Date.now(),
         name: newAcc.name,
@@ -268,6 +345,8 @@ export default function TravelHub() {
   // --- Place Operations ---
   const handleOpenAddPlace = () => {
     setEditingPlaceId(null);
+    setAiPlaceQuery('');
+    setAiPendingPlaceResult(null);
     setNewPlace({
       name: '',
       category: 'Santuario/Tempio',
@@ -283,6 +362,8 @@ export default function TravelHub() {
 
   const handleOpenEditPlace = (place: PlaceToVisit) => {
     setEditingPlaceId(place.id);
+    setAiPlaceQuery('');
+    setAiPendingPlaceResult(null);
     setNewPlace({
       name: place.name,
       category: place.category,
@@ -301,7 +382,6 @@ export default function TravelHub() {
     if (!data || !newPlace.name) return;
 
     if (editingPlaceId) {
-      // Editing existing place
       const updatedPlaces = data.places.map(p => {
         if (p.id === editingPlaceId) {
           return {
@@ -320,7 +400,6 @@ export default function TravelHub() {
 
       updateData({ ...data, places: updatedPlaces });
     } else {
-      // Creating new place
       const place: PlaceToVisit = {
         id: 'p_' + Date.now(),
         name: newPlace.name,
@@ -379,14 +458,14 @@ export default function TravelHub() {
           <div className="flex items-center gap-2 mb-1 text-xs font-semibold text-blue-400 uppercase tracking-wider">
             <span>🧳 Documenti & Prenotazioni Viaggio</span>
             <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px]">
-              Offline Sync Attivo
+              AI Search & Offline Sync
             </span>
           </div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-white">
             Travel Planner & Carte d'Imbarco
           </h2>
           <p className="text-slate-400 text-sm mt-1">
-            Inserisci e modifica tutti i dettagli dei tuoi voli, prenotazioni alloggi e luoghi da esplorare.
+            Cerca con l'AI o inserisci manualmente voli, alloggi e luoghi da esplorare.
           </p>
         </div>
 
@@ -465,7 +544,6 @@ export default function TravelHub() {
               {data.flights.map((flight) => (
                 <div key={flight.id} className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-800 hover:border-slate-700 transition-all shadow-xl relative group">
                   
-                  {/* Action Buttons: Edit & Delete */}
                   <div className="absolute top-4 right-4 flex items-center gap-2">
                     <button
                       onClick={() => handleOpenEditFlight(flight)}
@@ -484,7 +562,6 @@ export default function TravelHub() {
                   </div>
 
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pr-24">
-                    {/* Airline & Route */}
                     <div>
                       <div className="flex items-center gap-3 mb-2">
                         <span className="px-3 py-1 bg-blue-500/10 border border-blue-500/30 text-blue-400 font-bold text-xs rounded-full">
@@ -502,7 +579,6 @@ export default function TravelHub() {
                       </div>
                     </div>
 
-                    {/* Flight Times & Boarding Pass Details */}
                     <div className="flex flex-wrap gap-4 text-xs text-slate-300 bg-slate-800/40 p-4 rounded-xl border border-slate-800/80">
                       <div>
                         <span className="block text-slate-500 text-[10px] uppercase font-semibold">Partenza</span>
@@ -525,7 +601,6 @@ export default function TravelHub() {
                     </div>
                   </div>
 
-                  {/* Notes / Boarding info */}
                   {flight.notes && (
                     <div className="mt-4 pt-4 border-t border-slate-800/80 text-xs text-slate-400 flex items-start gap-2">
                       <span>📌</span>
@@ -567,7 +642,6 @@ export default function TravelHub() {
                 return (
                   <div key={acc.id} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all shadow-xl relative flex flex-col justify-between">
                     
-                    {/* Action Buttons: Edit & Delete */}
                     <div className="absolute top-4 right-4 flex items-center gap-2">
                       <button
                         onClick={() => handleOpenEditAcc(acc)}
@@ -678,7 +752,7 @@ export default function TravelHub() {
                     <p className="text-xs text-slate-400 mb-3 font-medium">📍 {place.city} {place.address ? `• ${place.address}` : ''}</p>
 
                     {place.notes && (
-                      <p className="text-xs text-slate-400 bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 mb-4 leading-relaxed">
+                      <p className="text-xs text-slate-400 bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 mb-4 leading-relaxed whitespace-pre-line">
                         {place.notes}
                       </p>
                     )}
@@ -867,7 +941,7 @@ export default function TravelHub() {
         </div>
       )}
 
-      {/* MODAL 2: ADD/EDIT ACCOMMODATION */}
+      {/* MODAL 2: ADD/EDIT ACCOMMODATION WITH AI AUTOCOMPLETE */}
       {isAccommodationModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-left">
@@ -878,7 +952,72 @@ export default function TravelHub() {
               <button onClick={() => setIsAccommodationModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <form onSubmit={handleSaveAccommodation} className="space-y-4 text-xs">
+            {/* AI Search Section for Accommodations */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/60 to-purple-950/40 border border-indigo-500/30 space-y-3">
+              <div className="flex items-center gap-2 text-indigo-300 font-bold text-xs">
+                <span>✨ Cerca & Autocompila Hotel con AI</span>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="es. Shinjuku Prince Hotel Tokyo..."
+                  value={aiAccQuery}
+                  onChange={e => setAiAccQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAISearchAcc(); }}}
+                  className="flex-1 bg-slate-950/80 border border-indigo-500/40 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-indigo-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleAISearchAcc}
+                  disabled={isAISearching}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-50"
+                >
+                  {isAISearching ? 'Ricerca...' : '🔍 Cerca'}
+                </button>
+              </div>
+
+              {/* AI Pending Result Confirmation Box */}
+              {aiPendingAccResult && (
+                <div className="p-4 rounded-xl bg-slate-900 border border-indigo-400/50 space-y-3 text-xs text-slate-200 animate-fadeIn">
+                  <div className="flex justify-between items-center text-amber-400 font-bold border-b border-slate-800 pb-2">
+                    <span>🤖 Risultato Trovato dall'AI:</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Confermi sia questo l'hotel?</span>
+                  </div>
+
+                  <div>
+                    <h5 className="font-extrabold text-white text-sm">{aiPendingAccResult.name}</h5>
+                    <p className="text-slate-400 text-xs mt-0.5">📍 {aiPendingAccResult.city} • {aiPendingAccResult.address}</p>
+                    {aiPendingAccResult.checkInTimes && (
+                      <p className="text-emerald-400 text-xs mt-1">🕒 {aiPendingAccResult.checkInTimes}</p>
+                    )}
+                    {aiPendingAccResult.estimatedCostYen !== undefined && (
+                      <p className="text-amber-300 font-semibold text-xs mt-1">
+                        Prezzo indicativo: ¥{aiPendingAccResult.estimatedCostYen.toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleConfirmAIAcc}
+                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all text-center"
+                    >
+                      ✅ Sì, compila modulo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAiPendingAccResult(null)}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
+                    >
+                      ❌ No
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleSaveAccommodation} className="space-y-4 text-xs pt-2">
               <div>
                 <label className="block text-slate-400 mb-1">Nome Struttura / Hotel</label>
                 <input
@@ -964,7 +1103,7 @@ export default function TravelHub() {
               <div>
                 <label className="block text-slate-400 mb-1">Note (es. colazione, orari check-in)</label>
                 <textarea
-                  rows={2}
+                  rows={3}
                   placeholder="es. Pagato in anticipo. Reception 24h..."
                   value={newAcc.notes}
                   onChange={e => setNewAcc({ ...newAcc, notes: e.target.value })}
@@ -992,7 +1131,7 @@ export default function TravelHub() {
         </div>
       )}
 
-      {/* MODAL 3: ADD/EDIT PLACE TO VISIT */}
+      {/* MODAL 3: ADD/EDIT PLACE TO VISIT WITH AI AUTOCOMPLETE */}
       {isPlaceModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-left">
@@ -1003,7 +1142,77 @@ export default function TravelHub() {
               <button onClick={() => setIsPlaceModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <form onSubmit={handleSavePlace} className="space-y-4 text-xs">
+            {/* AI Search Section for Places */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-950/60 to-indigo-950/40 border border-blue-500/30 space-y-3">
+              <div className="flex items-center gap-2 text-blue-300 font-bold text-xs">
+                <span>✨ Cerca & Autocompila Luogo con AI</span>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="es. Fushimi Inari, Sensoji, Tokyo Skytree..."
+                  value={aiPlaceQuery}
+                  onChange={e => setAiPlaceQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAISearchPlace(); }}}
+                  className="flex-1 bg-slate-950/80 border border-blue-500/40 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-blue-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleAISearchPlace}
+                  disabled={isAISearching}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-50"
+                >
+                  {isAISearching ? 'Ricerca...' : '🔍 Cerca'}
+                </button>
+              </div>
+
+              {/* AI Pending Result Confirmation Box */}
+              {aiPendingPlaceResult && (
+                <div className="p-4 rounded-xl bg-slate-900 border border-blue-400/50 space-y-3 text-xs text-slate-200 animate-fadeIn">
+                  <div className="flex justify-between items-center text-amber-400 font-bold border-b border-slate-800 pb-2">
+                    <span>🤖 Risultato Trovato dall'AI:</span>
+                    <span className="text-[10px] text-slate-400 font-normal">È questo il luogo?</span>
+                  </div>
+
+                  <div>
+                    <h5 className="font-extrabold text-white text-sm">{aiPendingPlaceResult.name}</h5>
+                    <p className="text-slate-400 text-xs mt-0.5">📍 {aiPendingPlaceResult.city} • {aiPendingPlaceResult.address}</p>
+                    {aiPendingPlaceResult.openingHours && (
+                      <p className="text-emerald-400 text-xs mt-1">🕒 {aiPendingPlaceResult.openingHours}</p>
+                    )}
+                    {aiPendingPlaceResult.estimatedCostYen !== undefined && (
+                      <p className="text-amber-300 font-semibold text-xs mt-1">
+                        Costo ingresso: {aiPendingPlaceResult.estimatedCostYen === 0 ? 'Gratuito (0 JPY)' : `¥${aiPendingPlaceResult.estimatedCostYen.toLocaleString()}`}
+                      </p>
+                    )}
+                    {aiPendingPlaceResult.notes && (
+                      <p className="text-slate-300 text-xs mt-1.5 italic bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                        💡 {aiPendingPlaceResult.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleConfirmAIPlace}
+                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all text-center"
+                    >
+                      ✅ Sì, compila modulo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAiPendingPlaceResult(null)}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
+                    >
+                      ❌ No
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleSavePlace} className="space-y-4 text-xs pt-2">
               <div>
                 <label className="block text-slate-400 mb-1">Nome Luogo / Attraction</label>
                 <input
@@ -1073,9 +1282,9 @@ export default function TravelHub() {
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">Note e Orari Consigliati</label>
+                <label className="block text-slate-400 mb-1">Note, Orari e Dettagli</label>
                 <textarea
-                  rows={2}
+                  rows={3}
                   placeholder="es. Visitare all'alba per scattare foto senza folla..."
                   value={newPlace.notes}
                   onChange={e => setNewPlace({ ...newPlace, notes: e.target.value })}
