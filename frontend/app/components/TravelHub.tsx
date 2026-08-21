@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { TravelData, FlightTicket, Accommodation, PlaceToVisit } from '../types/travel';
+import { TravelData, FlightTicket, Accommodation, PlaceToVisit, LayoverSegment } from '../types/travel';
 import { loadTravelData, saveTravelData, resetTravelData } from '../utils/travelStorage';
 import { searchWithAI, AISearchResult } from '../utils/aiSearch';
 import { AIItineraryResponse } from '../utils/aiItinerary';
@@ -47,7 +47,8 @@ export default function TravelHub() {
     terminal: '',
     gate: '',
     seat: '',
-    notes: ''
+    notes: '',
+    layovers: []
   });
 
   // New/Edit Accommodation Form State
@@ -175,15 +176,44 @@ export default function TravelHub() {
       terminal: '',
       gate: '',
       seat: '',
-      notes: ''
+      notes: '',
+      layovers: []
     });
     setIsFlightModalOpen(true);
   };
 
   const handleOpenEditFlight = (flight: FlightTicket) => {
     setEditingFlightId(flight.id);
-    setNewFlight({ ...flight });
+    setNewFlight({ ...flight, layovers: flight.layovers || [] });
     setIsFlightModalOpen(true);
+  };
+
+  const handleAddLayoverSegment = () => {
+    const currentLayovers = newFlight.layovers || [];
+    if (currentLayovers.length >= 3) return;
+    const newSegment: LayoverSegment = {
+      id: 'layover_' + Date.now(),
+      airport: '',
+      arrivalTime: '',
+      departureTime: ''
+    };
+    setNewFlight({ ...newFlight, layovers: [...currentLayovers, newSegment] });
+  };
+
+  const handleRemoveLayoverSegment = (id: string) => {
+    const currentLayovers = newFlight.layovers || [];
+    setNewFlight({
+      ...newFlight,
+      layovers: currentLayovers.filter(l => l.id !== id)
+    });
+  };
+
+  const handleUpdateLayoverSegment = (id: string, field: keyof LayoverSegment, value: string) => {
+    const currentLayovers = newFlight.layovers || [];
+    setNewFlight({
+      ...newFlight,
+      layovers: currentLayovers.map(l => l.id === id ? { ...l, [field]: value } : l)
+    });
   };
 
   const handleSaveFlight = (e: React.FormEvent) => {
@@ -206,7 +236,8 @@ export default function TravelHub() {
         terminal: newFlight.terminal,
         gate: newFlight.gate,
         seat: newFlight.seat,
-        notes: newFlight.notes
+        notes: newFlight.notes,
+        layovers: newFlight.layovers || []
       };
       updatedFlights = [...data.flights, flightToSave];
     }
@@ -359,24 +390,24 @@ export default function TravelHub() {
             </span>
           </div>
           <h2 className="text-2xl md:text-3xl font-extrabold text-white">
-            🇯🇵 TravelMind Hub Giappone
+            🇯🇵 TravelMind Hub Giappone & Viaggi
           </h2>
           <p className="text-slate-400 text-xs md:text-sm mt-1">
-            Organizza i tuoi biglietti aerei, gli alloggi, i luoghi da visitare e il Diario di Viaggio AI.
+            Organizza voli con scali, alloggi, luoghi da visitare e il Diario di Viaggio AI.
           </p>
         </div>
 
         <div className="flex gap-2">
           <button
             onClick={handleResetData}
-            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700"
+            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all border border-slate-700 cursor-pointer"
           >
             🔄 Ripristina Demo
           </button>
         </div>
       </div>
 
-      {/* Synchronized Map with Time-lapse Stepper */}
+      {/* SINGLE MAIN SYNCHRONIZED MAP */}
       <MapComponent 
         itinerary={activeItinerary} 
         selectedDayNumber={selectedDayNumber} 
@@ -387,7 +418,7 @@ export default function TravelHub() {
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-4">
         <button
           onClick={() => setActiveTab('flights')}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-all ${
+          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-all cursor-pointer ${
             activeTab === 'flights'
               ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
               : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800'
@@ -398,7 +429,7 @@ export default function TravelHub() {
 
         <button
           onClick={() => setActiveTab('accommodations')}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-all ${
+          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-all cursor-pointer ${
             activeTab === 'accommodations'
               ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
               : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800'
@@ -409,7 +440,7 @@ export default function TravelHub() {
 
         <button
           onClick={() => setActiveTab('places')}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-all ${
+          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-all cursor-pointer ${
             activeTab === 'places'
               ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
               : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800'
@@ -420,7 +451,7 @@ export default function TravelHub() {
 
         <button
           onClick={() => setActiveTab('itinerary')}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-all ${
+          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-all cursor-pointer ${
             activeTab === 'itinerary'
               ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/30'
               : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800'
@@ -437,7 +468,7 @@ export default function TravelHub() {
             <h3 className="text-lg font-bold text-slate-200">I Miei Voli & Carte d'Imbarco</h3>
             <button
               onClick={handleOpenAddFlight}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md cursor-pointer"
             >
               + Aggiungi Volo ✈️
             </button>
@@ -454,13 +485,13 @@ export default function TravelHub() {
                   <div className="absolute top-4 right-4 flex items-center gap-2">
                     <button
                       onClick={() => handleOpenEditFlight(flight)}
-                      className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-blue-300 text-xs font-semibold rounded-lg border border-slate-700 transition-all"
+                      className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-blue-300 text-xs font-semibold rounded-lg border border-slate-700 transition-all cursor-pointer"
                     >
                       ✏️ Modifica
                     </button>
                     <button
                       onClick={() => handleDeleteFlight(flight.id)}
-                      className="px-3 py-1 bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs font-semibold rounded-lg border border-red-800/40 transition-all"
+                      className="px-3 py-1 bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs font-semibold rounded-lg border border-red-800/40 transition-all cursor-pointer"
                     >
                       🗑️ Elimina
                     </button>
@@ -485,8 +516,8 @@ export default function TravelHub() {
                       </div>
 
                       <div className="mt-2 text-xs text-slate-400 space-y-1">
-                        <div>🛫 Partenza: <strong className="text-slate-200">{new Date(flight.departureTime).toLocaleString('it-IT')}</strong></div>
-                        <div>🛬 Arrivo: <strong className="text-slate-200">{new Date(flight.arrivalTime).toLocaleString('it-IT')}</strong></div>
+                        <div>🛫 Partenza Iniziale: <strong className="text-slate-200">{new Date(flight.departureTime).toLocaleString('it-IT')}</strong></div>
+                        <div>🛬 Arrivo Finale: <strong className="text-slate-200">{new Date(flight.arrivalTime).toLocaleString('it-IT')}</strong></div>
                       </div>
                     </div>
 
@@ -497,6 +528,23 @@ export default function TravelHub() {
                       {flight.seat && <div>💺 Posto: <strong className="text-emerald-400">{flight.seat}</strong></div>}
                     </div>
                   </div>
+
+                  {/* Layovers Display */}
+                  {flight.layovers && flight.layovers.length > 0 && (
+                    <div className="mt-4 p-3.5 rounded-xl bg-purple-950/40 border border-purple-800/40 text-xs text-purple-200 space-y-1.5">
+                      <strong className="block text-purple-300 font-bold">
+                        🔄 Scali Intermedi / Coincidenze ({flight.layovers.length}):
+                      </strong>
+                      {flight.layovers.map((l, i) => (
+                        <div key={l.id} className="flex flex-col md:flex-row md:items-center gap-2">
+                          <span className="font-semibold text-purple-200">• Scalo {i + 1}: 📍 {l.airport}</span>
+                          <span className="text-[11px] text-slate-300">
+                            (Atterraggio: {new Date(l.arrivalTime).toLocaleString('it-IT')} ➔ Ripartenza: {new Date(l.departureTime).toLocaleString('it-IT')})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {flight.notes && (
                     <div className="mt-4 pt-3 border-t border-slate-800/80 text-xs text-slate-400 italic">
@@ -517,7 +565,7 @@ export default function TravelHub() {
             <h3 className="text-lg font-bold text-slate-200">Alloggi & Hotel Prenotati</h3>
             <button
               onClick={handleOpenAddAcc}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md cursor-pointer"
             >
               + Aggiungi Alloggio 🏨
             </button>
@@ -530,7 +578,7 @@ export default function TravelHub() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {data.accommodations.map((acc) => (
-                <div key={acc.id} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all shadow-xl relative group flex flex-col justify-between">
+                <div key={acc.id} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-all shadow-xl relative flex flex-col justify-between">
                   <div>
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-2">
@@ -544,13 +592,13 @@ export default function TravelHub() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleOpenEditAcc(acc)}
-                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-blue-300 text-xs font-semibold rounded-lg border border-slate-700"
+                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-blue-300 text-xs font-semibold rounded-lg border border-slate-700 cursor-pointer"
                         >
                           ✏️
                         </button>
                         <button
                           onClick={() => handleDeleteAcc(acc.id)}
-                          className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs font-semibold rounded-lg border border-red-800/40"
+                          className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs font-semibold rounded-lg border border-red-800/40 cursor-pointer"
                         >
                           🗑️
                         </button>
@@ -588,7 +636,7 @@ export default function TravelHub() {
             <h3 className="text-lg font-bold text-slate-200">Luoghi & Attrazioni da Visitare</h3>
             <button
               onClick={handleOpenAddPlace}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md cursor-pointer"
             >
               + Aggiungi Luogo 📍
             </button>
@@ -610,13 +658,13 @@ export default function TravelHub() {
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => handleOpenEditPlace(place)}
-                          className="px-2 py-0.5 bg-slate-800 text-blue-300 text-xs font-semibold rounded"
+                          className="px-2 py-0.5 bg-slate-800 text-blue-300 text-xs font-semibold rounded cursor-pointer"
                         >
                           ✏️
                         </button>
                         <button
                           onClick={() => handleDeletePlace(place.id)}
-                          className="px-2 py-0.5 bg-red-950/40 text-red-400 text-xs font-semibold rounded"
+                          className="px-2 py-0.5 bg-red-950/40 text-red-400 text-xs font-semibold rounded cursor-pointer"
                         >
                           🗑️
                         </button>
@@ -660,22 +708,22 @@ export default function TravelHub() {
         />
       )}
 
-      {/* MODAL 1: FLIGHT */}
+      {/* MODAL 1: FLIGHT WITH MULTI-LAYOVER SUPPORT */}
       {isFlightModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl space-y-4 text-left">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 max-w-xl w-full shadow-2xl space-y-4 text-left max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold text-white">
               {editingFlightId ? '✏️ Modifica Volo' : '✈️ Inserisci Nuovo Volo'}
             </h3>
 
-            <form onSubmit={handleSaveFlight} className="space-y-3 text-xs">
+            <form onSubmit={handleSaveFlight} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-400 mb-1">Compagnia Aerea</label>
                   <input
                     type="text"
                     required
-                    placeholder="es. ITA Airways"
+                    placeholder="es. ITA Airways / Etihad"
                     value={newFlight.airline}
                     onChange={e => setNewFlight({ ...newFlight, airline: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500"
@@ -696,7 +744,7 @@ export default function TravelHub() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">Aeroporto Origine</label>
+                  <label className="block text-slate-400 mb-1">Aeroporto Partenza Iniziale</label>
                   <input
                     type="text"
                     required
@@ -707,7 +755,7 @@ export default function TravelHub() {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">Aeroporto Destinazione</label>
+                  <label className="block text-slate-400 mb-1">Aeroporto Arrivo Finale</label>
                   <input
                     type="text"
                     required
@@ -721,7 +769,7 @@ export default function TravelHub() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">Data/Ora Partenza</label>
+                  <label className="block text-slate-400 mb-1">Data/Ora Partenza Iniziale</label>
                   <input
                     type="datetime-local"
                     required
@@ -731,7 +779,7 @@ export default function TravelHub() {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">Data/Ora Arrivo</label>
+                  <label className="block text-slate-400 mb-1">Data/Ora Arrivo Finale</label>
                   <input
                     type="datetime-local"
                     required
@@ -740,6 +788,76 @@ export default function TravelHub() {
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-blue-500"
                   />
                 </div>
+              </div>
+
+              {/* DYNAMIC LAYOVERS SECTION (1, 2 or 3 layover segments) */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-purple-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-purple-300 font-bold">
+                    🔄 Scali Intermedi / Coincidenze ({newFlight.layovers?.length || 0}/3)
+                  </label>
+                  {(newFlight.layovers?.length || 0) < 3 && (
+                    <button
+                      type="button"
+                      onClick={handleAddLayoverSegment}
+                      className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
+                    >
+                      ➕ Aggiungi Scalo
+                    </button>
+                  )}
+                </div>
+
+                {newFlight.layovers && newFlight.layovers.length > 0 ? (
+                  newFlight.layovers.map((layover, index) => (
+                    <div key={layover.id} className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2 relative">
+                      <div className="flex items-center justify-between font-bold text-slate-300">
+                        <span>Scalo {index + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveLayoverSegment(layover.id)}
+                          className="text-red-400 hover:text-red-300 text-xs cursor-pointer"
+                        >
+                          🗑️ Rimuovi
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-slate-400 text-[10px]">Aeroporto Scalo</label>
+                          <input
+                            type="text"
+                            placeholder="es. Abu Dhabi (AUH)"
+                            value={layover.airport}
+                            onChange={e => handleUpdateLayoverSegment(layover.id, 'airport', e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 text-[10px]">Ora Atterraggio Scalo</label>
+                          <input
+                            type="datetime-local"
+                            value={layover.arrivalTime}
+                            onChange={e => handleUpdateLayoverSegment(layover.id, 'arrivalTime', e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 text-[10px]">Ora Ripartenza Scalo</label>
+                          <input
+                            type="datetime-local"
+                            value={layover.departureTime}
+                            onChange={e => handleUpdateLayoverSegment(layover.id, 'departureTime', e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[11px] text-slate-500 italic">
+                    Nessun volo di scalo aggiunto. Clicca su "+ Aggiungi Scalo" se il tuo volo prevede coincidenze.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-3">
@@ -790,13 +908,13 @@ export default function TravelHub() {
                 <button
                   type="button"
                   onClick={() => setIsFlightModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
                 >
                   Annulla
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 shadow-md"
+                  className="px-5 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 shadow-md cursor-pointer"
                 >
                   {editingFlightId ? 'Salva Modifiche' : 'Salva Volo'}
                 </button>
@@ -832,7 +950,7 @@ export default function TravelHub() {
                   type="button"
                   onClick={handleAISearchAcc}
                   disabled={isAISearching}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-50"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
                 >
                   {isAISearching ? 'Ricerca...' : '🔍 Cerca'}
                 </button>
@@ -855,14 +973,14 @@ export default function TravelHub() {
                     <button
                       type="button"
                       onClick={handleConfirmAIAcc}
-                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all text-center"
+                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all text-center cursor-pointer"
                     >
                       ✅ Sì, compila modulo
                     </button>
                     <button
                       type="button"
                       onClick={() => setAiPendingAccResult(null)}
-                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer"
                     >
                       ❌ No
                     </button>
@@ -969,13 +1087,13 @@ export default function TravelHub() {
                 <button
                   type="button"
                   onClick={() => setIsAccommodationModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
                 >
                   Annulla
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 shadow-md"
+                  className="px-5 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 shadow-md cursor-pointer"
                 >
                   {editingAccId ? 'Salva Modifiche' : 'Salva Alloggio'}
                 </button>
@@ -1011,7 +1129,7 @@ export default function TravelHub() {
                   type="button"
                   onClick={handleAISearchPlace}
                   disabled={isAISearching}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-50"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer"
                 >
                   {isAISearching ? 'Ricerca...' : '🔍 Cerca'}
                 </button>
@@ -1034,14 +1152,14 @@ export default function TravelHub() {
                     <button
                       type="button"
                       onClick={handleConfirmAIPlace}
-                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all text-center"
+                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all text-center cursor-pointer"
                     >
                       ✅ Sì, compila modulo
                     </button>
                     <button
                       type="button"
                       onClick={() => setAiPendingPlaceResult(null)}
-                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs"
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer"
                     >
                       ❌ No
                     </button>
@@ -1133,13 +1251,13 @@ export default function TravelHub() {
                 <button
                   type="button"
                   onClick={() => setIsPlaceModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
                 >
                   Annulla
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 shadow-md"
+                  className="px-5 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 shadow-md cursor-pointer"
                 >
                   {editingPlaceId ? 'Salva Modifiche' : 'Salva Luogo'}
                 </button>

@@ -1,3 +1,11 @@
+export interface LayoverSegment {
+  id: string;
+  airport: string;
+  arrivalTime: string;   // ISO date/time string
+  departureTime: string; // ISO date/time string
+  notes?: string;
+}
+
 export interface FlightTicket {
   id: string;
   airline: string;
@@ -11,6 +19,7 @@ export interface FlightTicket {
   gate?: string;
   seat?: string;
   notes?: string;
+  layovers?: LayoverSegment[]; // Up to 3 layover segments
 }
 
 export interface Accommodation {

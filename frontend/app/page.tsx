@@ -4,17 +4,7 @@ import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import TransitRouter from './components/TransitRouter';
 
-// Dynamic import for Leaflet OpenStreetMap component to disable SSR
-const MapComponent = dynamic(() => import('./components/MapComponent'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-[400px] rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 text-sm animate-pulse">
-      Caricamento Mappa OpenStreetMap in corso... 🗺️
-    </div>
-  ),
-});
-
-// Dynamic import for TravelHub component to handle client-side localStorage
+// Dynamic import for TravelHub component to handle client-side localStorage and synchronized Map
 const TravelHub = dynamic(() => import('./components/TravelHub'), {
   ssr: false,
   loading: () => (
@@ -95,13 +85,10 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Main Interactive Sections Container */}
-      <div className="max-w-6xl w-full space-y-8 mb-12">
-        {/* Travel Planner & Documents Hub */}
+      {/* Main Interactive Sections Container (SINGLE CLEAN MAP & HUB) */}
+      <div id="travel-hub" className="max-w-6xl w-full space-y-8 mb-12">
+        {/* Travel Planner, Documents Hub & Synchronized Map */}
         <TravelHub />
-
-        {/* Leaflet OpenStreetMap Interactive Component */}
-        <MapComponent />
 
         {/* Public Transit Router Component */}
         <TransitRouter />
@@ -117,7 +104,7 @@ export default function Home() {
         <FeatureCard 
           title="Mappe OpenStreetMap" 
           icon="🗺️" 
-          desc="Mappe interattive 100% gratuite senza chiavi API o carta di credito con punti d'interesse e stazioni." 
+          desc="Mappa interattiva 100% gratuita senza chiavi API con punti d'interesse, stazioni e percorsi." 
         />
         <FeatureCard 
           title="Mezzi Pubblici & Treni" 

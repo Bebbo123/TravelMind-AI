@@ -20,7 +20,7 @@ interface MapComponentProps {
   onSelectDayChange?: (dayNumber: number) => void;
 }
 
-const KNOWN_LOCATIONS: Record<string, { lat: number; lng: number; nameIt: string; nameJa: string }> = {
+const ACCURATE_KNOWN_LOCATIONS: Record<string, { lat: number; lng: number; nameIt: string; nameJa: string }> = {
   'milano': { lat: 45.6306, lng: 8.7281, nameIt: 'Aeroporto Milano Malpensa (MXP)', nameJa: 'ミラノ・マルペンサ空港' },
   'roma': { lat: 41.7999, lng: 12.2462, nameIt: 'Aeroporto Roma Fiumicino (FCO)', nameJa: 'ローマ・フィウミチーノ空港' },
   'abu dhabi': { lat: 24.4330, lng: 54.6511, nameIt: 'Aeroporto Abu Dhabi (AUH)', nameJa: 'アブダビ国際空港' },
@@ -45,14 +45,40 @@ const KNOWN_LOCATIONS: Record<string, { lat: number; lng: number; nameIt: string
   'fuji': { lat: 35.360625, lng: 138.727363, nameIt: 'Monte Fuji', nameJa: '富士山' },
 };
 
-function getCoordsForPlace(name: string, city?: string): { lat: number; lng: number; nameIt: string; nameJa: string } {
+const geocodeCache: Record<string, { lat: number; lng: number }> = {};
+
+async function fetchAccurateCoords(name: string, city?: string): Promise<{ lat: number; lng: number; nameIt: string; nameJa: string }> {
   const normName = (name + ' ' + (city || '')).toLowerCase();
-  for (const [key, loc] of Object.entries(KNOWN_LOCATIONS)) {
+  for (const [key, loc] of Object.entries(ACCURATE_KNOWN_LOCATIONS)) {
     if (normName.includes(key)) return loc;
   }
-  if (city && city.toLowerCase().includes('kyoto')) return KNOWN_LOCATIONS['kyoto'];
-  if (city && city.toLowerCase().includes('osaka')) return KNOWN_LOCATIONS['osaka'];
-  return KNOWN_LOCATIONS['tokyo'];
+
+  // Check cache
+  if (geocodeCache[normName]) {
+    return { ...geocodeCache[normName], nameIt: name, nameJa: name };
+  }
+
+  // Geocode dynamically with OpenStreetMap Nominatim
+  try {
+    const queryStr = encodeURIComponent(`${name} ${city || ''}`);
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${queryStr}&limit=1`, {
+      headers: { 'User-Agent': 'TravelMind-AI-App' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+        geocodeCache[normName] = coords;
+        return { ...coords, nameIt: name, nameJa: data[0].display_name || name };
+      }
+    }
+  } catch (e) {
+    // fallback
+  }
+
+  if (city && city.toLowerCase().includes('kyoto')) return ACCURATE_KNOWN_LOCATIONS['kyoto'];
+  if (city && city.toLowerCase().includes('osaka')) return ACCURATE_KNOWN_LOCATIONS['osaka'];
+  return ACCURATE_KNOWN_LOCATIONS['tokyo'];
 }
 
 export default function MapComponent({ itinerary, selectedDayNumber, onSelectDayChange }: MapComponentProps) {
@@ -64,13 +90,12 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
   // States
   const [mapLang, setMapLang] = useState<'IT' | 'JA'>('IT');
   const [currentDayIndex, setCurrentDayIndex] = useState<number>(0);
-  const [isPlayingTimeLapse, setIsPlayingTimeLapse] = useState<boolean>(false);
   const [activePoint, setActivePoint] = useState<MapPoint | null>(null);
 
   const daysList = itinerary?.days || [];
   const activeDaySchedule: AIDaySchedule | null = daysList[currentDayIndex] || daysList[0] || null;
 
-  // Sync with selectedDayNumber prop
+  // Sync with selectedDayNumber prop from parent
   useEffect(() => {
     if (selectedDayNumber && daysList.length > 0) {
       const idx = daysList.findIndex(d => d.dayNumber === selectedDayNumber);
@@ -78,25 +103,7 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
     }
   }, [selectedDayNumber, daysList]);
 
-  // Time-lapse Auto Play Effect
-  useEffect(() => {
-    let interval: any = null;
-    if (isPlayingTimeLapse && daysList.length > 0) {
-      interval = setInterval(() => {
-        setCurrentDayIndex((prevIndex) => {
-          const nextIndex = (prevIndex + 1) % daysList.length;
-          if (onSelectDayChange && daysList[nextIndex]) {
-            onSelectDayChange(daysList[nextIndex].dayNumber);
-          }
-          return nextIndex;
-        });
-      }, 2500);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isPlayingTimeLapse, daysList, onSelectDayChange]);
-
+  // Strictly Manual Day Stepping Handlers
   const handlePrevDay = () => {
     if (daysList.length === 0) return;
     const newIdx = currentDayIndex > 0 ? currentDayIndex - 1 : daysList.length - 1;
@@ -118,7 +125,9 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
   useEffect(() => {
     if (typeof window === 'undefined' || !mapRef.current) return;
 
-    import('leaflet').then((L) => {
+    let isMounted = true;
+
+    import('leaflet').then(async (L) => {
       if (!leafletMap.current) {
         delete (L.Icon.Default.prototype as any)._getIconUrl;
         L.Icon.Default.mergeOptions({
@@ -138,22 +147,19 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
         polylinesLayer.current = L.layerGroup().addTo(map);
       }
 
-      // Clear layers
+      // Clear previous layers
       if (markersLayer.current) markersLayer.current.clearLayers();
       if (polylinesLayer.current) polylinesLayer.current.clearLayers();
 
       const pointsToPlot: MapPoint[] = [];
-      const flightLatLngs: [number, number][] = [];
-      const transitLatLngs: [number, number][] = [];
-      const walkLatLngs: [number, number][] = [];
 
       if (activeDaySchedule && activeDaySchedule.timeline) {
-        activeDaySchedule.timeline.forEach((item, idx) => {
+        for (let idx = 0; idx < activeDaySchedule.timeline.length; idx++) {
+          const item = activeDaySchedule.timeline[idx];
           const name = item.placeName || item.activity;
-          const loc = getCoordsForPlace(name, activeDaySchedule.city);
+          const loc = await fetchAccurateCoords(name, activeDaySchedule.city);
           
-          const offsetLat = loc.lat + (idx * 0.002);
-          const offsetLng = loc.lng + (idx * 0.002);
+          if (!isMounted) return;
 
           const cat: MapPoint['category'] = 
             item.transitType === 'flight' || item.activity.toLowerCase().includes('volo') || item.activity.toLowerCase().includes('atterraggio')
@@ -166,24 +172,17 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
               ? 'food'
               : 'attraction';
 
-          const point: MapPoint = {
+          pointsToPlot.push({
             id: `p_${idx}`,
             nameIt: loc.nameIt || item.activity,
             nameJa: loc.nameJa || loc.nameIt || item.activity,
             category: cat,
-            lat: offsetLat,
-            lng: offsetLng,
+            lat: loc.lat,
+            lng: loc.lng,
             desc: item.transitDetail || item.mealSuggestion || item.activity,
             time: item.time
-          };
-
-          pointsToPlot.push(point);
-
-          const coordPair: [number, number] = [offsetLat, offsetLng];
-          if (cat === 'flight') flightLatLngs.push(coordPair);
-          else if (cat === 'walk') walkLatLngs.push(coordPair);
-          else transitLatLngs.push(coordPair);
-        });
+          });
+        }
       } else {
         // Fallback default points
         pointsToPlot.push(
@@ -193,10 +192,22 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
         );
       }
 
-      // Render Markers with language support
+      if (!isMounted) return;
+
+      // Render Markers
+      const flightLatLngs: [number, number][] = [];
+      const transitLatLngs: [number, number][] = [];
+      const walkLatLngs: [number, number][] = [];
       const allLatLngs: [number, number][] = [];
+
       pointsToPlot.forEach((pt) => {
-        allLatLngs.push([pt.lat, pt.lng]);
+        const coordPair: [number, number] = [pt.lat, pt.lng];
+        allLatLngs.push(coordPair);
+
+        if (pt.category === 'flight') flightLatLngs.push(coordPair);
+        else if (pt.category === 'walk') walkLatLngs.push(coordPair);
+        else transitLatLngs.push(coordPair);
+
         const displayName = mapLang === 'JA' ? pt.nameJa : pt.nameIt;
 
         const iconEmoji = 
@@ -219,30 +230,14 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
         marker.on('click', () => setActivePoint(pt));
       });
 
-      // Render Distinct Transport Lines (Flight = Purple/Cyan, Transit = Blue, Walk = Green)
-      if (flightLatLngs.length > 1) {
-        L.polyline(flightLatLngs, {
-          color: '#a855f7',
+      // Render Polylines Chronologically in Order of Sequence
+      if (allLatLngs.length > 1) {
+        // Main chronological route line
+        L.polyline(allLatLngs, {
+          color: '#6366f1',
           weight: 4,
-          opacity: 0.9,
-          dashArray: '10, 10'
-        }).addTo(polylinesLayer.current);
-      }
-
-      if (transitLatLngs.length > 1) {
-        L.polyline(transitLatLngs, {
-          color: '#3b82f6',
-          weight: 4,
-          opacity: 0.85
-        }).addTo(polylinesLayer.current);
-      }
-
-      if (walkLatLngs.length > 1) {
-        L.polyline(walkLatLngs, {
-          color: '#10b981',
-          weight: 3,
-          opacity: 0.8,
-          dashArray: '4, 4'
+          opacity: 0.85,
+          dashArray: '6, 6'
         }).addTo(polylinesLayer.current);
       }
 
@@ -253,64 +248,51 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
         leafletMap.current.setView(allLatLngs[0], 11);
       }
     });
+
+    return () => {
+      isMounted = false;
+    };
   }, [activeDaySchedule, mapLang]);
 
   return (
     <div className="w-full bg-slate-900 border border-slate-800 rounded-3xl p-4 md:p-6 shadow-2xl text-left space-y-4">
       
-      {/* Time Navigation & Language Control Header */}
+      {/* Control Header & Language Switcher */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              🗺️ Mappa Principale Viaggio & Scorrimento Tempo
-            </h2>
-          </div>
-          <p className="text-xs text-slate-400">
-            Linee distinte per ✈️ Aerei (Viola), 🚆 Treni/Mezzi (Blu), 🚶 A Piedi (Verde)
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            🗺️ Mappa Principale Viaggio
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Geocodifica reale ed etichette bilingue per tutti i luoghi ed i voli del viaggio
           </p>
         </div>
 
-        {/* Controls: Language Switcher & Time Playback */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Language Switch Button */}
-          <button
-            onClick={() => setMapLang(prev => prev === 'IT' ? 'JA' : 'IT')}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-            title="Cambia Lingua Mappa"
-          >
-            <span>🌐 Lingua:</span>
-            <span className={mapLang === 'IT' ? 'text-indigo-400 font-extrabold' : 'text-slate-400'}>IT 🇮🇹</span>
-            <span>/</span>
-            <span className={mapLang === 'JA' ? 'text-rose-400 font-extrabold' : 'text-slate-400'}>日本語 🇯🇵</span>
-          </button>
-
-          {/* Time-lapse Play/Pause Button */}
-          <button
-            onClick={() => setIsPlayingTimeLapse(!isPlayingTimeLapse)}
-            className={`px-4 py-2 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-md ${
-              isPlayingTimeLapse
-                ? 'bg-amber-600 text-white animate-pulse'
-                : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-            }`}
-          >
-            <span>{isPlayingTimeLapse ? '⏸️ Pausa Time-Lapse' : '▶️ Play Scorrimento Tempo'}</span>
-          </button>
-        </div>
+        {/* Language Switcher */}
+        <button
+          onClick={() => setMapLang(prev => prev === 'IT' ? 'JA' : 'IT')}
+          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-all flex items-center gap-2 self-start md:self-auto cursor-pointer shadow-md"
+          title="Switch tra Italiano e Lingua Locale"
+        >
+          <span>🌐 Lingua Mappa:</span>
+          <span className={mapLang === 'IT' ? 'text-indigo-400 font-extrabold' : 'text-slate-400'}>Italiano 🇮🇹</span>
+          <span>/</span>
+          <span className={mapLang === 'JA' ? 'text-rose-400 font-extrabold' : 'text-slate-400'}>日本語 🇯🇵</span>
+        </button>
       </div>
 
-      {/* Date Stepper Bar (◀️ Date 22/11/2026 ▶️) */}
+      {/* Strictly Manual Date Stepper Bar */}
       {daysList.length > 0 && activeDaySchedule && (
-        <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2">
+        <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2 shadow-inner">
           <button
             onClick={handlePrevDay}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-800 transition-all"
+            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-800 transition-all active:scale-95 cursor-pointer"
           >
             ◀️ Giorno Precedente
           </button>
 
           <div className="text-center">
-            <span className="font-extrabold text-sm text-indigo-400">
+            <span className="font-extrabold text-sm md:text-base text-indigo-400">
               📅 {activeDaySchedule.formattedDate || activeDaySchedule.date}
             </span>
             <span className="text-xs text-slate-400 block font-medium">
@@ -320,39 +302,43 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
 
           <button
             onClick={handleNextDay}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-800 transition-all"
+            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-800 transition-all active:scale-95 cursor-pointer"
           >
             Giorno Successivo ▶️
           </button>
         </div>
       )}
 
-      {/* Leaflet Map Div */}
+      {/* Single Clean Leaflet Map Div */}
       <div 
         ref={mapRef} 
         className="w-full h-[400px] md:h-[480px] rounded-2xl overflow-hidden border border-slate-700/60 shadow-inner bg-slate-950 relative"
       />
 
-      {/* Legend & Active Point Card */}
-      <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800 gap-2">
-        <div className="flex flex-wrap gap-4 font-semibold">
-          <span className="flex items-center gap-1.5 text-purple-400">
-            <span className="w-3 h-1 bg-purple-500 rounded inline-block"></span> ✈️ Volo Aereo
-          </span>
-          <span className="flex items-center gap-1.5 text-blue-400">
-            <span className="w-3 h-1 bg-blue-500 rounded inline-block"></span> 🚆 Treni / Mezzi Pubblici
-          </span>
-          <span className="flex items-center gap-1.5 text-emerald-400">
-            <span className="w-3 h-1 bg-emerald-500 rounded inline-block"></span> 🚶 A Piedi / Passeggiata
-          </span>
-        </div>
-
-        {activePoint && (
-          <div className="text-right font-bold text-slate-200">
-            Selezionato: {mapLang === 'JA' ? activePoint.nameJa : activePoint.nameIt}
+      {/* Selected Point Info Footer */}
+      {activePoint && (
+        <div className="p-4 rounded-xl bg-slate-800/80 border border-slate-700 text-left flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-fadeIn">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xl">
+                {activePoint.category === 'flight' ? '✈️' : activePoint.category === 'transit' ? '🚆' : activePoint.category === 'food' ? '🍜' : '📍'}
+              </span>
+              <h4 className="font-bold text-white text-base">
+                {mapLang === 'JA' ? activePoint.nameJa : activePoint.nameIt}
+              </h4>
+            </div>
+            <p className="text-xs text-slate-300 mt-1">{activePoint.desc}</p>
           </div>
-        )}
-      </div>
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${activePoint.lat},${activePoint.lng}&travelmode=transit`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-all shadow-md shrink-0 flex items-center gap-1.5"
+          >
+            Indicazioni Google Maps 🗺️
+          </a>
+        </div>
+      )}
     </div>
   );
 }
