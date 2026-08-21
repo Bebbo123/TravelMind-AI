@@ -1,16 +1,4 @@
-import { TravelData, FlightTicket } from '../types/travel';
-
-export interface AIItineraryItem {
-  time: string;
-  activity: string;
-  type: 'place' | 'transit' | 'meal' | 'break';
-  placeName?: string;
-  transitDetail?: string;
-  mealSuggestion?: string;
-  costEstimateYen?: number;
-  feasibilityWarning?: string;
-  transitType?: 'flight' | 'train' | 'subway' | 'taxi' | 'walk';
-}
+import { TravelData, FlightTicket, AIItineraryItem } from '../types/travel';
 
 export interface AIDaySchedule {
   dayNumber: number;
@@ -92,6 +80,9 @@ interface RealRoute {
   durationMinutes: number;
   costEstimateYen: number;
   transitType: 'train' | 'subway' | 'flight';
+  lineName?: string;
+  stopCount?: number;
+  distanceKm?: number;
 }
 
 function getRealInterCityTransit(fromCity: string, toCity: string): RealRoute {
@@ -100,31 +91,40 @@ function getRealInterCityTransit(fromCity: string, toCity: string): RealRoute {
 
   if (from.includes('tokyo') && to.includes('kyoto')) {
     return {
-      activity: '🚆 Spostamento Shinkansen: Stazione di Tokyo ➔ Stazione di Kyoto (Treno Veloce JR Nozomi)',
-      detail: 'Linea JR Tokaido Shinkansen Nozomi (2h 15m, posti riservati). Spedizione bagagli Takkyubin.',
+      activity: '🚆 Spostamento Shinkansen: Stazione di Tokyo (東京駅) ➔ Stazione di Kyoto (京都駅) [JR Nozomi]',
+      detail: 'Linea JR Tokaido Shinkansen Nozomi (2h 15m diretti, posti riservati). Spedizione bagagli Takkyubin.',
       durationMinutes: 135,
       costEstimateYen: 13870,
-      transitType: 'train'
+      transitType: 'train',
+      lineName: 'JR Tokaido Shinkansen Nozomi',
+      stopCount: 4,
+      distanceKm: 513
     };
   }
 
   if (from.includes('kyoto') && to.includes('osaka')) {
     return {
-      activity: '🚆 Spostamento Treno: Stazione di Kyoto ➔ Stazione di Osaka/Namba (JR Special Rapid)',
+      activity: '🚆 Spostamento Treno: Stazione di Kyoto (京都駅) ➔ Stazione di Osaka/Namba (大阪駅) [JR Special Rapid]',
       detail: 'Linea JR Kyoto Special Rapid / Hankyu Railway (29m diretti tra Kyoto e Osaka).',
       durationMinutes: 30,
       costEstimateYen: 570,
-      transitType: 'train'
+      transitType: 'train',
+      lineName: 'JR Kyoto Line Special Rapid',
+      stopCount: 3,
+      distanceKm: 42
     };
   }
 
   if (from.includes('osaka') && to.includes('tokyo')) {
     return {
-      activity: '🚆 Spostamento Shinkansen: Stazione Shin-Osaka ➔ Stazione di Tokyo (Treno Veloce JR Nozomi)',
+      activity: '🚆 Spostamento Shinkansen: Stazione Shin-Osaka (新大阪駅) ➔ Stazione di Tokyo (東京駅) [JR Nozomi]',
       detail: 'Linea JR Tokaido Shinkansen (2h 25m diretti con vista sul Monte Fuji).',
       durationMinutes: 145,
       costEstimateYen: 14450,
-      transitType: 'train'
+      transitType: 'train',
+      lineName: 'JR Tokaido Shinkansen Nozomi',
+      stopCount: 4,
+      distanceKm: 513
     };
   }
 
@@ -134,7 +134,10 @@ function getRealInterCityTransit(fromCity: string, toCity: string): RealRoute {
       detail: 'Volo regionale diretto (3h 30m di volo).',
       durationMinutes: 210,
       costEstimateYen: 25000,
-      transitType: 'flight'
+      transitType: 'flight',
+      lineName: 'Volo Commerciale Diretto',
+      stopCount: 0,
+      distanceKm: 2180
     };
   }
 
@@ -143,7 +146,10 @@ function getRealInterCityTransit(fromCity: string, toCity: string): RealRoute {
     detail: `Collegamento ferroviario diretto tra ${fromCity} e ${toCity} (~1h 15m).`,
     durationMinutes: 75,
     costEstimateYen: 2500,
-    transitType: 'train'
+    transitType: 'train',
+    lineName: 'JR Express',
+    stopCount: 5,
+    distanceKm: 85
   };
 }
 
@@ -175,7 +181,7 @@ export async function generateAIItinerary(
     }
   }
 
-  // --- Dynamic Multi-Flight, Hotel Check-Out Bounds & Real Transit Engine ---
+  // --- Dynamic Step-by-Step Tourist & Hotel Loop Engine ---
   const dates = preferences ? { startDate: preferences.startDate, endDate: preferences.endDate } : inferTripDates(tripData);
   
   const start = new Date(dates.startDate || '2026-10-22');
@@ -211,16 +217,11 @@ export async function generateAIItinerary(
       return arrDate === dateStr && depDate !== dateStr;
     });
 
-    // Detect exact hotel check-out / transfer day:
-    // Hotel A checkOut === dateStr AND Hotel B checkIn === dateStr
     const checkingOutAcc = accs.find(a => a.checkOut === dateStr);
     const checkingInAcc = accs.find(a => a.checkIn === dateStr);
 
     const isHotelTransferDay = checkingOutAcc && checkingInAcc && checkingOutAcc.id !== checkingInAcc.id && !flightDepartingToday && !flightArrivingToday;
 
-    // Determine current active hotel for this date:
-    // If it's a transfer day, the active hotel for the afternoon/night is checkingInAcc.
-    // Otherwise, find acc where checkIn <= dateStr && dateStr < checkOut.
     let currentAcc = isHotelTransferDay
       ? checkingInAcc
       : accs.find(a => dateStr >= a.checkIn && dateStr < a.checkOut) || checkingInAcc || checkingOutAcc || accs[i % (accs.length || 1)] || { name: 'Hotel in Centro', city: 'Tokyo' };
@@ -230,7 +231,6 @@ export async function generateAIItinerary(
       currentCity = 'In Volo (Roma ➔ Taipei)';
     }
 
-    // Filter places STRICTLY matching current city
     const cityPlaces = places.filter(p => {
       if (!p.city) return true;
       const pCity = p.city.toLowerCase();
@@ -245,7 +245,7 @@ export async function generateAIItinerary(
     });
     
     const dayPlaces = cityPlaces.slice((i * 2) % (cityPlaces.length || 1), ((i * 2) % (cityPlaces.length || 1)) + 2);
-    const primaryPlace = dayPlaces[0] || (currentCity.includes('Taipei') ? { name: 'Grattacielo Taipei 101 & Mercato Serale Shilin', category: 'Quartiere/Shopping' } : { name: 'Esplorazione Quartiere', category: 'Quartiere/Shopping' });
+    const primaryPlace = dayPlaces[0] || (currentCity.includes('Taipei') ? { name: 'Grattacielo Taipei 101 (臺北101) [Taipei 101]', category: 'Quartiere/Shopping' } : { name: 'Tempio Senso-ji (浅草寺) [Asakusa-dera]', category: 'Santuario/Tempio' });
     const secondaryPlace = dayPlaces[1];
 
     const timeline: AIItineraryItem[] = [];
@@ -255,11 +255,16 @@ export async function generateAIItinerary(
       const depTime = new Date(flightDepartingToday.departureTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
       
       timeline.push({
+        id: `step_${i}_1`,
         time: depTime,
-        activity: `🛫 Partenza Volo Aereo ${flightDepartingToday.airline} (${flightDepartingToday.flightNumber}): ${flightDepartingToday.origin} ➔ ${flightDepartingToday.destination}`,
+        activity: `Partenza Volo Aereo ${flightDepartingToday.airline} (${flightDepartingToday.flightNumber}): ${flightDepartingToday.origin} ➔ ${flightDepartingToday.destination}`,
+        activityJa: `航空便出発 ${flightDepartingToday.flightNumber}`,
         type: 'transit',
         transitType: 'flight',
-        transitDetail: `Compagnia: ${flightDepartingToday.airline}. Terminal: ${flightDepartingToday.terminal || '3'}. Presentarsi in aeroporto 3 ore prima.`
+        transitDetail: `Compagnia: ${flightDepartingToday.airline}. Terminal: ${flightDepartingToday.terminal || '3'}. Presentarsi in aeroporto 3 ore prima.`,
+        durationMinutes: 480,
+        distanceKm: 9800,
+        costEstimateYen: 120000
       });
 
       if (flightDepartingToday.layovers && flightDepartingToday.layovers.length > 0) {
@@ -267,8 +272,9 @@ export async function generateAIItinerary(
           const lDep = l.departureTime ? new Date(l.departureTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '';
           const lArr = l.arrivalTime ? new Date(l.arrivalTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '';
           timeline.push({
+            id: `step_${i}_layover_${lIdx}`,
             time: `${lArr} - ${lDep}`,
-            activity: `🔄 Scalo ${lIdx + 1}: Aeroporto di ${l.airport}`,
+            activity: `Scalo ${lIdx + 1}: Aeroporto di ${l.airport}`,
             type: 'break',
             transitDetail: `Attesa coincidenza in aeroporto. Atterraggio: ${lArr} ➔ Ripartenza: ${lDep}`
           });
@@ -276,6 +282,7 @@ export async function generateAIItinerary(
       }
 
       timeline.push({
+        id: `step_${i}_night`,
         time: '21:20 - 08:00',
         activity: '🌙 Volo Notturno Intercontinentale in Aereo',
         type: 'break',
@@ -289,45 +296,72 @@ export async function generateAIItinerary(
       currentCity = currentAcc.city || flightArrivingToday.destination;
 
       timeline.push({
+        id: `step_${i}_arr`,
         time: arrTime,
-        activity: `🛬 Atterraggio FINALE a ${flightArrivingToday.destination}`,
+        activity: `Atterraggio FINALE ad Aeroporto ${flightArrivingToday.destination}`,
         type: 'place',
         placeName: flightArrivingToday.destination
       });
 
       timeline.push({
+        id: `step_${i}_trans_hotel`,
         time: '12:00 - 13:00',
-        activity: `Spostamento dall'Aeroporto all'Hotel (${currentAcc.name})`,
+        activity: `Spostamento Treno Express: Aeroporto ➔ Hotel ${currentAcc.name}`,
         type: 'transit',
         transitType: 'train',
-        transitDetail: `Treno Express dall'aeroporto a ${currentAcc.name} (${currentCity}).`
+        transitDetail: `Treno Taoyuan Airport MRT / Narita Express N'EX dall'aeroporto a ${currentAcc.name} (${currentCity}).`,
+        departurePoint: flightArrivingToday.destination,
+        destinationPoint: currentAcc.name,
+        durationMinutes: 45,
+        distanceKm: 42,
+        costEstimateYen: 1600,
+        lineName: 'Airport Express MRT / N\'EX',
+        stopCount: 4
       });
 
       timeline.push({
+        id: `step_${i}_checkin`,
         time: '13:00 - 14:00',
         activity: `Check-in / Deposito Valigie presso ${currentAcc.name}`,
         type: 'break'
       });
 
       timeline.push({
+        id: `step_${i}_pomeriggio`,
         time: '14:30 - 17:30',
         activity: `Pomeriggio a ${currentCity}: Visita a ${primaryPlace.name}`,
+        placeName: primaryPlace.name,
         type: 'place',
-        placeName: primaryPlace.name
+        description: `Esplorazione pomeridiana di ${primaryPlace.name} con monumenti iconici e negozi tradizionali.`,
+        history: 'Luogo storico fondato nei secoli scorsi, centro spirituale e culturale della città.',
+        curiosity: 'Si dice che toccare la struttura porti fortuna e longevità.',
+        openingHours: '08:30 - 18:30',
+        admissionPriceYen: 500,
+        recommendedDurationMin: 90,
+        crowdLevel: 'Medio',
+        interestRating: 'Imperdibile ⭐',
+        nearbyPlaces: ['Mercato Tradizionale', 'Parco cittadino con panorama', 'Galleria commerciale']
       });
 
       timeline.push({
-        time: '19:00 - 21:00',
-        activity: `Cena nei dintorni di ${currentCity}`,
-        type: 'meal',
-        mealSuggestion: 'Specialità della cucina locale'
+        id: `step_${i}_hotel_return`,
+        time: '21:00 - 21:30',
+        activity: `Rientro in Hotel (${currentAcc.name})`,
+        type: 'hotel_return',
+        transitType: 'subway',
+        transitDetail: `Rientro serale in hotel per il pernottamento (${currentAcc.name}).`,
+        departurePoint: currentCity,
+        destinationPoint: currentAcc.name,
+        durationMinutes: 20,
+        distanceKm: 4.2
       });
 
     } else if (isHotelTransferDay) {
-      // EXACT HOTEL CHECK-OUT / CHECK-IN TRANSFER DAY
+      // HOTEL TRANSFER DAY
       const realRoute = getRealInterCityTransit(checkingOutAcc!.city, checkingInAcc!.city);
 
       timeline.push({
+        id: `step_${i}_checkout`,
         time: '08:30 - 09:00',
         activity: `Check-out da ${checkingOutAcc!.name} (${checkingOutAcc!.city})`,
         type: 'break',
@@ -335,15 +369,23 @@ export async function generateAIItinerary(
       });
 
       timeline.push({
+        id: `step_${i}_shinkansen`,
         time: '09:30 - 11:45',
         activity: realRoute.activity,
         type: 'transit',
         transitType: realRoute.transitType,
         transitDetail: realRoute.detail,
-        costEstimateYen: realRoute.costEstimateYen
+        departurePoint: checkingOutAcc!.name,
+        destinationPoint: checkingInAcc!.name,
+        durationMinutes: realRoute.durationMinutes,
+        distanceKm: realRoute.distanceKm || 450,
+        costEstimateYen: realRoute.costEstimateYen,
+        lineName: realRoute.lineName,
+        stopCount: realRoute.stopCount
       });
 
       timeline.push({
+        id: `step_${i}_checkin_b`,
         time: '12:00 - 12:45',
         activity: `Arrivo a ${checkingInAcc!.city} & Deposito Valigie / Check-in (${checkingInAcc!.name})`,
         type: 'break',
@@ -351,6 +393,7 @@ export async function generateAIItinerary(
       });
 
       timeline.push({
+        id: `step_${i}_pranzo`,
         time: '13:00 - 14:00',
         activity: `Pranzo a ${checkingInAcc!.city}`,
         type: 'meal',
@@ -358,72 +401,131 @@ export async function generateAIItinerary(
       });
 
       timeline.push({
+        id: `step_${i}_place_b`,
         time: '14:30 - 17:30',
         activity: `Pomeriggio a ${checkingInAcc!.city}: Visita a ${primaryPlace.name}`,
         type: 'place',
-        placeName: primaryPlace.name
+        placeName: primaryPlace.name,
+        description: `Visita a ${primaryPlace.name} nel cuore di ${checkingInAcc!.city}.`,
+        openingHours: '09:00 - 17:00',
+        admissionPriceYen: 600,
+        recommendedDurationMin: 120,
+        crowdLevel: 'Alto',
+        interestRating: 'Imperdibile ⭐',
+        nearbyPlaces: ['Galleria Commerciale', 'Ristorante di Ramen', 'Santuario Locale']
       });
 
       timeline.push({
-        time: '18:30 - 20:30',
-        activity: `Cena nei dintorni di ${checkingInAcc!.name}`,
-        type: 'meal',
-        mealSuggestion: 'Ristorante tipico vicino al nuovo hotel'
+        id: `step_${i}_hotel_return_b`,
+        time: '21:00 - 21:30',
+        activity: `Rientro in Hotel (${checkingInAcc!.name})`,
+        type: 'hotel_return',
+        transitType: 'subway',
+        transitDetail: `Rientro serale in hotel per il pernottamento (${checkingInAcc!.name}).`,
+        departurePoint: primaryPlace.name,
+        destinationPoint: checkingInAcc!.name,
+        durationMinutes: 20,
+        distanceKm: 3.8
       });
 
     } else {
-      // Normal Sightseeing Day
+      // NORMAL SIGHTSEEING DAY WITH STRICT HOTEL START & RETURN LOOP!
       timeline.push({
-        time: '09:00 - 09:30',
-        activity: `Spostamento in Metropolitana/Mezzi verso ${primaryPlace.name}`,
+        id: `step_${i}_hotel_start`,
+        time: '08:30 - 09:00',
+        activity: `Partenza Hotel (${currentAcc.name})`,
+        type: 'break',
+        transitDetail: `Uscita dall'hotel per iniziare le visite della giornata a ${currentCity}.`
+      });
+
+      timeline.push({
+        id: `step_${i}_trans_1`,
+        time: '09:00 - 09:22',
+        activity: `Spostamento Metro/Treno verso ${primaryPlace.name}`,
         type: 'transit',
         transitType: 'subway',
-        transitDetail: `Metropolitana da ${currentAcc.name} a ${primaryPlace.name} (20 min)`
+        transitDetail: `Prendi la Metro/Linea Urbana da ${currentAcc.name} a ${primaryPlace.name} (8 fermate, 22 min).`,
+        departurePoint: currentAcc.name,
+        destinationPoint: primaryPlace.name,
+        durationMinutes: 22,
+        distanceKm: 5.8,
+        costEstimateYen: 220,
+        lineName: 'Tokyo Metro Ginza Line / Kyoto Subway',
+        stopCount: 8,
+        fastestAlternative: 'Taxi Express (12 min, ¥1,800)',
+        cheapestAlternative: 'Autobus Locale (25 min, ¥210)'
       });
+
       timeline.push({
+        id: `step_${i}_place_1`,
         time: '09:30 - 12:00',
         activity: `Visita a ${primaryPlace.name}`,
+        placeName: primaryPlace.name,
         type: 'place',
-        placeName: primaryPlace.name
+        description: `Splendida attrazione turistica di ${currentCity} ricca di atmosfera e tradizione.`,
+        history: 'Edificato nei secoli scorsi, rappresenta una delle tappe più importanti della città.',
+        curiosity: 'Frequentato dai locali al mattino presto per evitare le folle.',
+        openingHours: '08:30 - 18:00',
+        admissionPriceYen: primaryPlace.estimatedCostYen || 500,
+        recommendedDurationMin: 90,
+        crowdLevel: 'Medio',
+        interestRating: 'Imperdibile ⭐',
+        nearbyPlaces: ['Quartiere Shopping', 'Santuario Storico', 'Parco con Giardino']
       });
+
       timeline.push({
+        id: `step_${i}_meal`,
         time: '12:30 - 13:30',
-        activity: 'Pranzo',
+        activity: 'Pranzo Tipico',
         type: 'meal',
-        mealSuggestion: 'Ristorante tipico nei dintorni'
+        mealSuggestion: 'Ristorante tipico di Ramen / Tempura nei dintorni'
       });
 
       if (secondaryPlace) {
         timeline.push({
+          id: `step_${i}_place_2`,
           time: '14:00 - 17:00',
           activity: `Esplorazione di ${secondaryPlace.name}`,
+          placeName: secondaryPlace.name,
           type: 'place',
           transitType: 'walk',
-          placeName: secondaryPlace.name
+          description: `Passeggiata ed esplorazione di ${secondaryPlace.name}.`,
+          openingHours: '09:00 - 19:00',
+          admissionPriceYen: secondaryPlace.estimatedCostYen || 0,
+          recommendedDurationMin: 120,
+          crowdLevel: 'Alto',
+          interestRating: 'Consigliato ⭐️',
+          nearbyPlaces: ['Strada Pedonale', 'Caffè Tradizionale']
         });
       } else {
         timeline.push({
+          id: `step_${i}_place_2_gen`,
           time: '14:00 - 17:00',
-          activity: `Passeggiata a piedi nel quartiere di ${currentCity}`,
+          activity: `Passeggiata a piedi nel quartiere centrale di ${currentCity}`,
+          placeName: `Quartiere centrale ${currentCity}`,
           type: 'place',
           transitType: 'walk',
-          placeName: `Quartiere centrale ${currentCity}`
+          description: `Passeggiata libera tra i vicoli del quartiere centrale.`,
+          openingHours: '24h',
+          admissionPriceYen: 0,
+          recommendedDurationMin: 120,
+          crowdLevel: 'Medio',
+          interestRating: 'Consigliato ⭐️'
         });
       }
 
       timeline.push({
-        time: '18:00 - 18:30',
+        id: `step_${i}_hotel_return_end`,
+        time: '21:00 - 21:35',
         activity: `Rientro in Hotel (${currentAcc.name})`,
-        type: 'transit',
-        transitType: 'walk',
-        transitDetail: `Rientro in hotel (15 min)`
-      });
-
-      timeline.push({
-        time: '18:30 - 20:30',
-        activity: `Cena nei dintorni di ${currentAcc.name}`,
-        type: 'meal',
-        mealSuggestion: 'Cena Sukiyaki/Shabu-Shabu o Izakaya'
+        type: 'hotel_return',
+        transitType: 'subway',
+        transitDetail: `Rientro serale in hotel per il pernottamento (${currentAcc.name}).`,
+        departurePoint: currentCity,
+        destinationPoint: currentAcc.name,
+        durationMinutes: 35,
+        distanceKm: 6.2,
+        costEstimateYen: 240
       });
     }
 
@@ -446,7 +548,7 @@ export async function generateAIItinerary(
         ? `Arrivo a ${currentCity} il ${formattedDate}: Atterraggio, check-in e visite pomeridiane.`
         : isHotelTransferDay
         ? `Trasferimento Reale il ${formattedDate}: Check-out da ${checkingOutAcc!.name} (${checkingOutAcc!.city}) e viaggio in Treno per ${checkingInAcc!.name} (${checkingInAcc!.city}).`
-        : `Giorno ${formattedDate}: Spostamenti integrati con l'hotel ${currentAcc.name}.`,
+        : `Giorno ${formattedDate}: Ciclo completo con partenza ed il rientro finale presso l'hotel ${currentAcc.name}.`,
       timeline
     });
   }
@@ -486,7 +588,7 @@ export async function generateAIItinerary(
 
   return {
     globalFeasibilityRating: preferences?.pace === 'Intenso' ? 'Troppo Densa' : 'Ottima',
-    globalFeasibilityNotes: `Itinerario generato dal ${formatItalianDate(dates.startDate)} al ${formatItalianDate(dates.endDate)} (${totalDays} giorni). Spostamenti tra hotel allineati alle date esatte di check-in e check-out.`,
+    globalFeasibilityNotes: `Itinerario generato dal ${formatItalianDate(dates.startDate)} al ${formatItalianDate(dates.endDate)} (${totalDays} giorni). Ogni giornata include il ciclo completo con partenza e rientro in hotel, fermate metro dettagliate e pronuncia Romaji.`,
     days,
     suggestedNewPlaces
   };
@@ -528,6 +630,7 @@ export async function replanSingleDayWithAI(
   if (promptLower.includes('finito prima') || promptLower.includes('anticipo')) {
     summary = `⚡ Modifica al volo: Aggiunta tappa flash nelle vicinanze per le ore rimanenti.`;
     newTimeline.push({
+      id: `replan_${Date.now()}`,
       time: '17:30 - 18:30',
       activity: 'Tappa Flash: Panorama al Tramonto dal Viewpoint più vicino',
       type: 'place',
@@ -547,6 +650,7 @@ export async function replanSingleDayWithAI(
       return item;
     });
     lightTimeline.push({
+      id: `replan_${Date.now()}`,
       time: '16:00 - 17:30',
       activity: 'Pausa Caffè Tradizionale o Bagno Termale Onsen',
       type: 'break',
@@ -577,6 +681,7 @@ export async function replanSingleDayWithAI(
   } else {
     summary = `💬 Modifica al volo su richiesta utente: "${userPrompt}".`;
     newTimeline.push({
+      id: `replan_${Date.now()}`,
       time: '17:30 - 18:30',
       activity: `Attività personalizzata: ${userPrompt}`,
       type: 'place'

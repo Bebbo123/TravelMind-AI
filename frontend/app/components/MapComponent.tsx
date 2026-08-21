@@ -27,29 +27,30 @@ const ACCURATE_KNOWN_LOCATIONS: Record<string, { lat: number; lng: number; nameI
   'abu dhabi': { lat: 24.4330, lng: 54.6511, nameIt: 'Aeroporto Abu Dhabi (AUH)', nameLocal: 'مطار أبو ظبي الدولي' },
   'taipei': { lat: 25.0797, lng: 121.2342, nameIt: 'Aeroporto Taipei Taoyuan (TPE)', nameLocal: '臺灣桃園國際機場' },
   'sky garden ii': { lat: 25.0478, lng: 121.5170, nameIt: 'Hotel Sky Garden II (Taipei)', nameLocal: 'Sky Garden II 台北' },
-  'taipei 101': { lat: 25.0339, lng: 121.5645, nameIt: 'Grattacielo Taipei 101', nameLocal: '臺北101' },
-  'shilin': { lat: 25.0888, lng: 121.5244, nameIt: 'Mercato Serale di Shilin (Taipei)', nameLocal: '士林夜市' },
-  'tokyo': { lat: 35.681236, lng: 139.767125, nameIt: 'Stazione di Tokyo', nameLocal: '東京駅' },
-  'dormy inn akihabara': { lat: 35.7015, lng: 139.7725, nameIt: 'Hotel Dormy Inn Akihabara (Tokyo)', nameLocal: 'ドーミーイン秋葉原' },
-  'edo tokyo': { lat: 35.7118, lng: 139.5132, nameIt: 'Edo Tokyo Open Air Architectural Museum', nameLocal: '江戸東京たてもの園' },
-  'shinjuku': { lat: 35.6938, lng: 139.7034, nameIt: 'Shinjuku Prince Hotel', nameLocal: '新宿プリンスホテル' },
-  'shibuya': { lat: 35.658034, lng: 139.701636, nameIt: 'Incrocio di Shibuya', nameLocal: '渋谷スクランブル交差点' },
-  'asakusa': { lat: 35.714765, lng: 139.796655, nameIt: 'Tempio Sensō-ji (Asakusa)', nameLocal: '浅草寺' },
-  'harajuku': { lat: 35.6702, lng: 139.7027, nameIt: 'Takeshita Street (Harajuku)', nameLocal: '竹下通り' },
-  'ginza': { lat: 35.6719, lng: 139.7648, nameIt: 'Quartiere Ginza', nameLocal: '銀座' },
-  'akihabara': { lat: 35.6997, lng: 139.7714, nameIt: 'Akihabara Electric Town', nameLocal: '秋葉原電気街' },
-  'ueno': { lat: 35.7141, lng: 139.7741, nameIt: 'Parco di Ueno & Ameyoko', nameLocal: '上野恩賜公園' },
+  'taipei 101': { lat: 25.0339, lng: 121.5645, nameIt: 'Grattacielo Taipei 101 (臺北101)', nameLocal: '臺北101' },
+  'shilin': { lat: 25.0888, lng: 121.5244, nameIt: 'Mercato Serale di Shilin (士林夜市)', nameLocal: '士林夜市' },
+  'tokyo': { lat: 35.681236, lng: 139.767125, nameIt: 'Stazione di Tokyo (東京駅) [Tōkyō-eki]', nameLocal: '東京駅' },
+  'dormy inn akihabara': { lat: 35.7015, lng: 139.7725, nameIt: 'Hotel Dormy Inn Akihabara (ドーミーイン秋葉原)', nameLocal: 'ドーミーイン秋葉原' },
+  'edo tokyo': { lat: 35.7118, lng: 139.5132, nameIt: 'Edo Tokyo Open Air Architectural Museum (江戸東京たてもの園)', nameLocal: '江戸東京たてもの園' },
+  'shinjuku': { lat: 35.6938, lng: 139.7034, nameIt: 'Stazione di Shinjuku (新宿駅) [Shinjuku-eki]', nameLocal: '新宿駅' },
+  'shibuya': { lat: 35.658034, lng: 139.701636, nameIt: 'Incrocio di Shibuya (渋谷スクランブル交差点)', nameLocal: '渋谷スクランブル交差点' },
+  'senso-ji': { lat: 35.714765, lng: 139.796655, nameIt: 'Tempio Senso-ji (浅草寺) [Asakusa-dera]', nameLocal: '浅草寺' },
+  'asakusa': { lat: 35.714765, lng: 139.796655, nameIt: 'Tempio Senso-ji (浅草寺) [Asakusa-dera]', nameLocal: '浅草寺' },
+  'harajuku': { lat: 35.6702, lng: 139.7027, nameIt: 'Takeshita Street (竹下通り)', nameLocal: '竹下通り' },
+  'ginza': { lat: 35.6719, lng: 139.7648, nameIt: 'Quartiere Ginza (銀座)', nameLocal: '銀座' },
+  'akihabara': { lat: 35.6997, lng: 139.7714, nameIt: 'Akihabara Electric Town (秋葉原)', nameLocal: '秋葉原電気街' },
+  'ueno': { lat: 35.7141, lng: 139.7741, nameIt: 'Stazione di Ueno (上野駅) [Ueno-eki]', nameLocal: '上野駅' },
   'haneda': { lat: 35.5494, lng: 139.7798, nameIt: 'Aeroporto Tokyo Haneda (HND)', nameLocal: '羽田空港' },
   'narita': { lat: 35.7720, lng: 140.3929, nameIt: 'Aeroporto Tokyo Narita (NRT)', nameLocal: '成田国際空港' },
-  'kyoto': { lat: 34.985849, lng: 135.758767, nameIt: 'Stazione Centrale di Kyoto', nameLocal: '京都駅' },
+  'kyoto': { lat: 34.985849, lng: 135.758767, nameIt: 'Stazione di Kyoto (京都駅) [Kyōto-eki]', nameLocal: '京都駅' },
   'amanek kyoto': { lat: 34.9950, lng: 135.7660, nameIt: 'HOTEL AMANEK Kyoto Kawaramachi Gojo', nameLocal: 'ホテルアマネク京都河原町五条' },
-  'gion': { lat: 35.0037, lng: 135.7772, nameIt: 'Quartiere Gion (Kyoto)', nameLocal: '祇園' },
-  'fushimi inari': { lat: 34.96714, lng: 135.772671, nameIt: 'Santuario Fushimi Inari Taisha', nameLocal: '伏見稲荷大社' },
-  'arashiyama': { lat: 35.0117, lng: 135.6777, nameIt: 'Foresta di Bambù di Arashiyama', nameLocal: '嵐山竹林' },
-  'osaka': { lat: 34.665809, lng: 135.501175, nameIt: 'Stazione Namba / Osaka', nameLocal: '難波駅 / 大阪駅' },
+  'gion': { lat: 35.0037, lng: 135.7772, nameIt: 'Quartiere Gion (祇園)', nameLocal: '祇園' },
+  'fushimi inari': { lat: 34.96714, lng: 135.772671, nameIt: 'Santuario Fushimi Inari Taisha (伏見稲荷大社)', nameLocal: '伏見稲荷大社' },
+  'arashiyama': { lat: 35.0117, lng: 135.6777, nameIt: 'Foresta di Bambù di Arashiyama (嵐山竹林)', nameLocal: '嵐山竹林' },
+  'osaka': { lat: 34.665809, lng: 135.501175, nameIt: 'Stazione Namba / Osaka (大阪駅)', nameLocal: '難波駅 / 大阪駅' },
   'candeo hotels osaka': { lat: 34.6937, lng: 135.5010, nameIt: 'Candeo Hotels Osaka The Tower', nameLocal: 'カンデオホテルズ大阪ザ・タワー' },
-  'osaka acquarium': { lat: 34.6545, lng: 135.4290, nameIt: 'Acquario di Osaka Kaiyukan', nameLocal: '海遊館 (Osaka Aquarium Kaiyukan)' },
-  'dotonbori': { lat: 34.6687, lng: 135.5013, nameIt: 'Dotonbori (Osaka)', nameLocal: '道頓堀' }
+  'osaka acquarium': { lat: 34.6545, lng: 135.4290, nameIt: 'Acquario di Osaka Kaiyukan (海遊館)', nameLocal: '海遊館 (Osaka Aquarium Kaiyukan)' },
+  'dotonbori': { lat: 34.6687, lng: 135.5013, nameIt: 'Dotonbori (道頓堀)', nameLocal: '道頓堀' }
 };
 
 const geocodeCache: Record<string, { lat: number; lng: number }> = {};
@@ -211,7 +212,7 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
             cat = 'walk';
           } else if (item.type === 'meal') {
             cat = 'food';
-          } else if (item.type === 'break' || item.activity.toLowerCase().includes('hotel') || item.activity.toLowerCase().includes('check-in')) {
+          } else if (item.type === 'break' || item.type === 'hotel_return' || item.activity.toLowerCase().includes('hotel') || item.activity.toLowerCase().includes('check-in')) {
             cat = 'hotel';
           }
 
@@ -223,7 +224,7 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
             category: cat,
             lat: loc.lat,
             lng: loc.lng,
-            desc: item.transitDetail || item.mealSuggestion || item.activity,
+            desc: item.transitDetail || item.description || item.activity,
             time: item.time
           });
         }
@@ -286,11 +287,11 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
             ">
               <span style="background: #4f46e5; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px;">${pt.stepNumber}</span>
               <span>${iconEmoji}</span>
-              <span style="max-width: 110px; overflow: hidden; text-overflow: ellipsis;">${displayName}</span>
+              <span style="max-width: 120px; overflow: hidden; text-overflow: ellipsis;">${displayName}</span>
             </div>
           `,
-          iconSize: [140, 28],
-          iconAnchor: [70, 14]
+          iconSize: [150, 28],
+          iconAnchor: [75, 14]
         });
 
         const marker = L.marker([pt.lat, pt.lng], { icon: customIcon }).addTo(markersLayer.current);

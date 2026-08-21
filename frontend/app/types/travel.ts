@@ -52,3 +52,39 @@ export interface TravelData {
   accommodations: Accommodation[];
   places: PlaceToVisit[];
 }
+
+export interface AIItineraryItem {
+  id?: string;
+  time: string;
+  activity: string;
+  activityJa?: string;
+  romaji?: string;
+  type: 'place' | 'transit' | 'meal' | 'break' | 'hotel_return';
+  transitType?: 'flight' | 'train' | 'subway' | 'taxi' | 'walk';
+  placeName?: string;
+  placeNameJa?: string;
+  transitDetail?: string;
+  mealSuggestion?: string;
+  departurePoint?: string;
+  destinationPoint?: string;
+  durationMinutes?: number;
+  distanceKm?: number;
+  costEstimateYen?: number;
+  lineName?: string;
+  stopCount?: number;
+  changesCount?: number;
+  fastestAlternative?: string;
+  cheapestAlternative?: string;
+  description?: string;
+  history?: string;
+  curiosity?: string;
+  openingHours?: string;
+  admissionPriceYen?: number;
+  recommendedDurationMin?: number;
+  crowdLevel?: 'Basso' | 'Medio' | 'Alto' | 'Molto Alto';
+  interestRating?: 'Imperdibile ⭐' | 'Consigliato ⭐️' | 'Opzionale';
+  services?: string[];
+  website?: string;
+  imageUrl?: string;
+  nearbyPlaces?: string[];
+}
