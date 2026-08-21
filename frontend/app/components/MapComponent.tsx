@@ -25,10 +25,12 @@ const ACCURATE_KNOWN_LOCATIONS: Record<string, { lat: number; lng: number; nameI
   'roma': { lat: 41.7999, lng: 12.2462, nameIt: 'Aeroporto Roma Fiumicino (FCO)', nameLocal: 'Aeroporto di Roma-Fiumicino' },
   'milano': { lat: 45.6306, lng: 8.7281, nameIt: 'Aeroporto Milano Malpensa (MXP)', nameLocal: 'Aeroporto di Milano-Malpensa' },
   'abu dhabi': { lat: 24.4330, lng: 54.6511, nameIt: 'Aeroporto Abu Dhabi (AUH)', nameLocal: 'مطار أبو ظبي الدولي' },
-  'taipei': { lat: 25.0797, lng: 121.2342, nameIt: 'Aeroporto Taipei Taoyuan (TPE)', nameLocal: '臺灣桃園國際機場' },
-  'sky garden ii': { lat: 25.0478, lng: 121.5170, nameIt: 'Hotel Sky Garden II (Taipei)', nameLocal: 'Sky Garden II 台北' },
+  'taipei airport': { lat: 25.0797, lng: 121.2342, nameIt: 'Aeroporto Taipei Taoyuan (TPE)', nameLocal: '臺灣桃園國際機場' },
+  'taoyuan': { lat: 25.0797, lng: 121.2342, nameIt: 'Aeroporto Taipei Taoyuan (TPE)', nameLocal: '臺灣桃園國際機場' },
   'taipei 101': { lat: 25.0339, lng: 121.5645, nameIt: 'Grattacielo Taipei 101 (臺北101)', nameLocal: '臺北101' },
+  'sky garden ii': { lat: 25.0440, lng: 121.5070, nameIt: 'Hotel Sky Garden II (Taipei)', nameLocal: 'Sky Garden II 台北' },
   'shilin': { lat: 25.0888, lng: 121.5244, nameIt: 'Mercato Serale di Shilin (士林夜市)', nameLocal: '士林夜市' },
+  'taipei': { lat: 25.0478, lng: 121.5170, nameIt: 'Stazione Centrale di Taipei (臺北車站)', nameLocal: '臺北車站' },
   'tokyo': { lat: 35.681236, lng: 139.767125, nameIt: 'Stazione di Tokyo (東京駅) [Tōkyō-eki]', nameLocal: '東京駅' },
   'dormy inn akihabara': { lat: 35.7015, lng: 139.7725, nameIt: 'Hotel Dormy Inn Akihabara (ドーミーイン秋葉原)', nameLocal: 'ドーミーイン秋葉原' },
   'edo tokyo': { lat: 35.7118, lng: 139.5132, nameIt: 'Edo Tokyo Open Air Architectural Museum (江戸東京たてもの園)', nameLocal: '江戸東京たてもの園' },
@@ -55,18 +57,35 @@ const ACCURATE_KNOWN_LOCATIONS: Record<string, { lat: number; lng: number; nameI
 
 const geocodeCache: Record<string, { lat: number; lng: number }> = {};
 
+function cleanSearchQuery(rawName: string, city?: string): string {
+  let cleaned = rawName
+    .replace(/^Partenza Hotel \((.*?)\)/i, '$1')
+    .replace(/^Rientro in Hotel \((.*?)\)/i, '$1')
+    .replace(/^Spostamento Metro\/Treno verso /i, '')
+    .replace(/^Spostamento dall'Aeroporto all'Hotel \((.*?)\)/i, '$1')
+    .replace(/^Visita a /i, '')
+    .replace(/^Esplorazione di /i, '')
+    .replace(/^Pranzo Tipico/i, city || '')
+    .replace(/^Passeggiata a piedi nel quartiere centrale di /i, '')
+    .trim();
+  
+  return cleaned;
+}
+
 async function fetchAccurateCoords(name: string, city?: string): Promise<{ lat: number; lng: number; nameIt: string; nameLocal: string }> {
-  const normName = (name + ' ' + (city || '')).toLowerCase();
+  const cleanedName = cleanSearchQuery(name, city);
+  const normName = (cleanedName + ' ' + (city || '')).toLowerCase();
+
   for (const [key, loc] of Object.entries(ACCURATE_KNOWN_LOCATIONS)) {
     if (normName.includes(key)) return loc;
   }
 
   if (geocodeCache[normName]) {
-    return { ...geocodeCache[normName], nameIt: name, nameLocal: name };
+    return { ...geocodeCache[normName], nameIt: cleanedName, nameLocal: cleanedName };
   }
 
   try {
-    const queryStr = encodeURIComponent(`${name} ${city || ''}`);
+    const queryStr = encodeURIComponent(`${cleanedName} ${city || ''}`);
     const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${queryStr}&limit=1`, {
       headers: { 'User-Agent': 'TravelMind-AI-App' }
     });
@@ -75,7 +94,7 @@ async function fetchAccurateCoords(name: string, city?: string): Promise<{ lat: 
       if (data && data.length > 0) {
         const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
         geocodeCache[normName] = coords;
-        return { ...coords, nameIt: name, nameLocal: data[0].display_name || name };
+        return { ...coords, nameIt: cleanedName, nameLocal: data[0].display_name || cleanedName };
       }
     }
   } catch (e) {
