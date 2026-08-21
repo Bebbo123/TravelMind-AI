@@ -101,7 +101,7 @@ function getRealInterCityTransit(fromCity: string, toCity: string): RealRoute {
   if (from.includes('tokyo') && to.includes('kyoto')) {
     return {
       activity: '🚆 Spostamento Shinkansen: Stazione di Tokyo ➔ Stazione di Kyoto (Treno Veloce JR Nozomi)',
-      detail: 'Linea JR Tokaido Shinkansen Nozomi (2h 15m, posti riservati). Suggerita spedizione bagagli Takkyubin.',
+      detail: 'Linea JR Tokaido Shinkansen Nozomi (2h 15m, posti riservati). Spedizione bagagli Takkyubin.',
       durationMinutes: 135,
       costEstimateYen: 13870,
       transitType: 'train'
@@ -111,7 +111,7 @@ function getRealInterCityTransit(fromCity: string, toCity: string): RealRoute {
   if (from.includes('kyoto') && to.includes('osaka')) {
     return {
       activity: '🚆 Spostamento Treno: Stazione di Kyoto ➔ Stazione di Osaka/Namba (JR Special Rapid)',
-      detail: 'Linea JR Kyoto Special Rapid / Hankyu Railway (29m diretti tra le due stazioni).',
+      detail: 'Linea JR Kyoto Special Rapid / Hankyu Railway (29m diretti tra Kyoto e Osaka).',
       durationMinutes: 30,
       costEstimateYen: 570,
       transitType: 'train'
@@ -140,9 +140,9 @@ function getRealInterCityTransit(fromCity: string, toCity: string): RealRoute {
 
   return {
     activity: `🚆 Spostamento Treno Express: ${fromCity} ➔ ${toCity}`,
-    detail: `Collegamento ferroviario diretto tra ${fromCity} e ${toCity} (~1h 30m).`,
-    durationMinutes: 90,
-    costEstimateYen: 3500,
+    detail: `Collegamento ferroviario diretto tra ${fromCity} e ${toCity} (~1h 15m).`,
+    durationMinutes: 75,
+    costEstimateYen: 2500,
     transitType: 'train'
   };
 }
@@ -175,7 +175,7 @@ export async function generateAIItinerary(
     }
   }
 
-  // --- Dynamic Multi-Flight, Hotel Transfer & Real Transit Engine ---
+  // --- Dynamic Multi-Flight, Hotel Check-Out Bounds & Real Transit Engine ---
   const dates = preferences ? { startDate: preferences.startDate, endDate: preferences.endDate } : inferTripDates(tripData);
   
   const start = new Date(dates.startDate || '2026-10-22');
@@ -188,11 +188,12 @@ export async function generateAIItinerary(
   const flights = [...(tripData.flights || [])].sort(
     (a, b) => new Date(a.departureTime).getTime() - new Date(b.departureTime).getTime()
   );
-  const accs = tripData.accommodations || [];
+  const accs = [...(tripData.accommodations || [])].sort(
+    (a, b) => new Date(a.checkIn).getTime() - new Date(b.checkIn).getTime()
+  );
   const places = tripData.places || [];
 
   const days: AIDaySchedule[] = [];
-  let previousAcc: any = null;
 
   for (let i = 0; i < totalDays; i++) {
     const current = new Date(start);
@@ -201,10 +202,8 @@ export async function generateAIItinerary(
     const formattedDate = formatItalianDate(dateStr);
     const dayNumber = i + 1;
 
-    // Check if there is a flight departing today
+    // Flight Departing / Arriving on this date
     const flightDepartingToday = flights.find(f => f.departureTime && f.departureTime.slice(0, 10) === dateStr);
-    
-    // Check if there is a flight arriving today
     const flightArrivingToday = flights.find(f => {
       if (!f.arrivalTime) return false;
       const arrDate = f.arrivalTime.slice(0, 10);
@@ -212,24 +211,26 @@ export async function generateAIItinerary(
       return arrDate === dateStr && depDate !== dateStr;
     });
 
-    const currentAcc = accs.find(a => {
-      if (!a.checkIn || !a.checkOut) return false;
-      return dateStr >= a.checkIn && dateStr <= a.checkOut;
-    }) || accs[i % (accs.length || 1)] || { name: 'Hotel in Centro', city: 'Tokyo' };
+    // Detect exact hotel check-out / transfer day:
+    // Hotel A checkOut === dateStr AND Hotel B checkIn === dateStr
+    const checkingOutAcc = accs.find(a => a.checkOut === dateStr);
+    const checkingInAcc = accs.find(a => a.checkIn === dateStr);
+
+    const isHotelTransferDay = checkingOutAcc && checkingInAcc && checkingOutAcc.id !== checkingInAcc.id && !flightDepartingToday && !flightArrivingToday;
+
+    // Determine current active hotel for this date:
+    // If it's a transfer day, the active hotel for the afternoon/night is checkingInAcc.
+    // Otherwise, find acc where checkIn <= dateStr && dateStr < checkOut.
+    let currentAcc = isHotelTransferDay
+      ? checkingInAcc
+      : accs.find(a => dateStr >= a.checkIn && dateStr < a.checkOut) || checkingInAcc || checkingOutAcc || accs[i % (accs.length || 1)] || { name: 'Hotel in Centro', city: 'Tokyo' };
 
     let currentCity = currentAcc.city || 'Tokyo';
     if (flightDepartingToday && flightDepartingToday.origin.toLowerCase().includes('roma')) {
       currentCity = 'In Volo (Roma ➔ Taipei)';
     }
 
-    // Detect Hotel Transfer Day (Check-out from previous hotel & Check-in at new hotel in different city)
-    const isHotelTransferDay = previousAcc && 
-      previousAcc.name !== currentAcc.name && 
-      previousAcc.city !== currentAcc.city && 
-      !flightDepartingToday && 
-      !flightArrivingToday;
-
-    // Filter places STRICTLY matching the active city! (No Japanese temples in Taipei)
+    // Filter places STRICTLY matching current city
     const cityPlaces = places.filter(p => {
       if (!p.city) return true;
       const pCity = p.city.toLowerCase();
@@ -258,7 +259,7 @@ export async function generateAIItinerary(
         activity: `🛫 Partenza Volo Aereo ${flightDepartingToday.airline} (${flightDepartingToday.flightNumber}): ${flightDepartingToday.origin} ➔ ${flightDepartingToday.destination}`,
         type: 'transit',
         transitType: 'flight',
-        transitDetail: `Compagnia: ${flightDepartingToday.airline}. Terminal: ${flightDepartingToday.terminal || '3'}. Presentarsi 3 ore prima.`
+        transitDetail: `Compagnia: ${flightDepartingToday.airline}. Terminal: ${flightDepartingToday.terminal || '3'}. Presentarsi in aeroporto 3 ore prima.`
       });
 
       if (flightDepartingToday.layovers && flightDepartingToday.layovers.length > 0) {
@@ -323,18 +324,18 @@ export async function generateAIItinerary(
       });
 
     } else if (isHotelTransferDay) {
-      // REAL INTER-CITY HOTEL TRANSFER DAY (Shinkansen / Express Train)
-      const realRoute = getRealInterCityTransit(previousAcc.city, currentAcc.city);
+      // EXACT HOTEL CHECK-OUT / CHECK-IN TRANSFER DAY
+      const realRoute = getRealInterCityTransit(checkingOutAcc!.city, checkingInAcc!.city);
 
       timeline.push({
-        time: '09:30 - 10:00',
-        activity: `Check-out da ${previousAcc.name} (${previousAcc.city})`,
+        time: '08:30 - 09:00',
+        activity: `Check-out da ${checkingOutAcc!.name} (${checkingOutAcc!.city})`,
         type: 'break',
-        transitDetail: `Check-out hotel e spostamento in stazione centrale con bagagli.`
+        transitDetail: `Check-out hotel e trasferimento alla stazione centrale.`
       });
 
       timeline.push({
-        time: '10:00 - 12:15',
+        time: '09:30 - 11:45',
         activity: realRoute.activity,
         type: 'transit',
         transitType: realRoute.transitType,
@@ -343,29 +344,29 @@ export async function generateAIItinerary(
       });
 
       timeline.push({
-        time: '12:30 - 13:30',
-        activity: `Arrivo a ${currentAcc.city} & Check-in / Deposito Valigie (${currentAcc.name})`,
+        time: '12:00 - 12:45',
+        activity: `Arrivo a ${checkingInAcc!.city} & Deposito Valigie / Check-in (${checkingInAcc!.name})`,
         type: 'break',
-        placeName: currentAcc.name
+        placeName: checkingInAcc!.name
       });
 
       timeline.push({
-        time: '13:30 - 14:30',
-        activity: `Pranzo a ${currentAcc.city}`,
+        time: '13:00 - 14:00',
+        activity: `Pranzo a ${checkingInAcc!.city}`,
         type: 'meal',
         mealSuggestion: 'Specialità gastronomica della nuova città'
       });
 
       timeline.push({
-        time: '15:00 - 18:00',
-        activity: `Pomeriggio a ${currentAcc.city}: Visita a ${primaryPlace.name}`,
+        time: '14:30 - 17:30',
+        activity: `Pomeriggio a ${checkingInAcc!.city}: Visita a ${primaryPlace.name}`,
         type: 'place',
         placeName: primaryPlace.name
       });
 
       timeline.push({
         time: '18:30 - 20:30',
-        activity: `Cena nei dintorni di ${currentAcc.name}`,
+        activity: `Cena nei dintorni di ${checkingInAcc!.name}`,
         type: 'meal',
         mealSuggestion: 'Ristorante tipico vicino al nuovo hotel'
       });
@@ -426,8 +427,6 @@ export async function generateAIItinerary(
       });
     }
 
-    previousAcc = currentAcc;
-
     days.push({
       dayNumber,
       date: dateStr,
@@ -437,7 +436,7 @@ export async function generateAIItinerary(
         : flightArrivingToday
         ? `${formattedDate} • Atterraggio a ${currentCity} & Check-in Hotel`
         : isHotelTransferDay
-        ? `${formattedDate} • Trasferimento Shinkansen/Express a ${currentCity} & Check-in ${currentAcc.name}`
+        ? `${formattedDate} • Trasferimento Shinkansen/Express a ${checkingInAcc!.city} & Check-in ${checkingInAcc!.name}`
         : `${formattedDate} • ${primaryPlace.name} (${currentCity})`,
       city: currentCity,
       accommodationName: currentAcc.name,
@@ -446,7 +445,7 @@ export async function generateAIItinerary(
         : flightArrivingToday
         ? `Arrivo a ${currentCity} il ${formattedDate}: Atterraggio, check-in e visite pomeridiane.`
         : isHotelTransferDay
-        ? `Spostamento Interurbano Reale il ${formattedDate}: Check-out da ${previousAcc.name} e viaggio in Treno Shinkansen per ${currentAcc.name} (${currentCity}).`
+        ? `Trasferimento Reale il ${formattedDate}: Check-out da ${checkingOutAcc!.name} (${checkingOutAcc!.city}) e viaggio in Treno per ${checkingInAcc!.name} (${checkingInAcc!.city}).`
         : `Giorno ${formattedDate}: Spostamenti integrati con l'hotel ${currentAcc.name}.`,
       timeline
     });
@@ -487,7 +486,7 @@ export async function generateAIItinerary(
 
   return {
     globalFeasibilityRating: preferences?.pace === 'Intenso' ? 'Troppo Densa' : 'Ottima',
-    globalFeasibilityNotes: `Itinerario generato dal ${formatItalianDate(dates.startDate)} al ${formatItalianDate(dates.endDate)} (${totalDays} giorni). Spostamenti reali tra hotel calcolati con treni Shinkansen Nozomi e treni Express.`,
+    globalFeasibilityNotes: `Itinerario generato dal ${formatItalianDate(dates.startDate)} al ${formatItalianDate(dates.endDate)} (${totalDays} giorni). Spostamenti tra hotel allineati alle date esatte di check-in e check-out.`,
     days,
     suggestedNewPlaces
   };

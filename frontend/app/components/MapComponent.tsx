@@ -30,6 +30,7 @@ const ACCURATE_KNOWN_LOCATIONS: Record<string, { lat: number; lng: number; nameI
   'taipei 101': { lat: 25.0339, lng: 121.5645, nameIt: 'Grattacielo Taipei 101', nameLocal: '臺北101' },
   'shilin': { lat: 25.0888, lng: 121.5244, nameIt: 'Mercato Serale di Shilin (Taipei)', nameLocal: '士林夜市' },
   'tokyo': { lat: 35.681236, lng: 139.767125, nameIt: 'Stazione di Tokyo', nameLocal: '東京駅' },
+  'dormy inn akihabara': { lat: 35.7015, lng: 139.7725, nameIt: 'Hotel Dormy Inn Akihabara (Tokyo)', nameLocal: 'ドーミーイン秋葉原' },
   'edo tokyo': { lat: 35.7118, lng: 139.5132, nameIt: 'Edo Tokyo Open Air Architectural Museum', nameLocal: '江戸東京たてもの園' },
   'shinjuku': { lat: 35.6938, lng: 139.7034, nameIt: 'Shinjuku Prince Hotel', nameLocal: '新宿プリンスホテル' },
   'shibuya': { lat: 35.658034, lng: 139.701636, nameIt: 'Incrocio di Shibuya', nameLocal: '渋谷スクランブル交差点' },
@@ -41,10 +42,13 @@ const ACCURATE_KNOWN_LOCATIONS: Record<string, { lat: number; lng: number; nameI
   'haneda': { lat: 35.5494, lng: 139.7798, nameIt: 'Aeroporto Tokyo Haneda (HND)', nameLocal: '羽田空港' },
   'narita': { lat: 35.7720, lng: 140.3929, nameIt: 'Aeroporto Tokyo Narita (NRT)', nameLocal: '成田国際空港' },
   'kyoto': { lat: 34.985849, lng: 135.758767, nameIt: 'Stazione Centrale di Kyoto', nameLocal: '京都駅' },
+  'amanek kyoto': { lat: 34.9950, lng: 135.7660, nameIt: 'HOTEL AMANEK Kyoto Kawaramachi Gojo', nameLocal: 'ホテルアマネク京都河原町五条' },
   'gion': { lat: 35.0037, lng: 135.7772, nameIt: 'Quartiere Gion (Kyoto)', nameLocal: '祇園' },
   'fushimi inari': { lat: 34.96714, lng: 135.772671, nameIt: 'Santuario Fushimi Inari Taisha', nameLocal: '伏見稲荷大社' },
   'arashiyama': { lat: 35.0117, lng: 135.6777, nameIt: 'Foresta di Bambù di Arashiyama', nameLocal: '嵐山竹林' },
-  'osaka': { lat: 34.665809, lng: 135.501175, nameIt: 'Stazione Namba Osaka', nameLocal: '難波駅' },
+  'osaka': { lat: 34.665809, lng: 135.501175, nameIt: 'Stazione Namba / Osaka', nameLocal: '難波駅 / 大阪駅' },
+  'candeo hotels osaka': { lat: 34.6937, lng: 135.5010, nameIt: 'Candeo Hotels Osaka The Tower', nameLocal: 'カンデオホテルズ大阪ザ・タワー' },
+  'osaka acquarium': { lat: 34.6545, lng: 135.4290, nameIt: 'Acquario di Osaka Kaiyukan', nameLocal: '海遊館 (Osaka Aquarium Kaiyukan)' },
   'dotonbori': { lat: 34.6687, lng: 135.5013, nameIt: 'Dotonbori (Osaka)', nameLocal: '道頓堀' }
 };
 
@@ -235,7 +239,6 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
         coordCounts[key] = count + 1;
 
         if (count > 0) {
-          // Slight spiral offset for overlapping pins
           const angle = count * 1.2;
           const offsetLat = Math.sin(angle) * 0.008 * count;
           const offsetLng = Math.cos(angle) * 0.008 * count;
@@ -256,7 +259,7 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
 
         const iconEmoji = 
           pt.category === 'flight' ? '✈️' :
-          pt.category === 'train' ? '🚆' :
+          pt.category === 'train' ? 'JR/🚆' :
           pt.category === 'subway' ? '🚇' :
           pt.category === 'taxi' ? '🚕' :
           pt.category === 'walk' ? '🚶' :
@@ -306,7 +309,7 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
         marker.bindPopup(popupContent);
         marker.on('click', () => setActivePoint(pt));
 
-        // Connect polyline to next point with distinct color and stroke
+        // Connect polyline to next point with explicit transit route details
         if (i < pointsToPlot.length - 1) {
           const nextPt = pointsToPlot[i + 1];
           const segmentCoords: [[number, number], [number, number]] = [coordPair, [nextPt.lat, nextPt.lng]];
@@ -314,32 +317,40 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
           let lineColor = '#6366f1';
           let dashArray = '0';
           let weight = 4;
+          let legTitle = `Spostamento Tappa #${pt.stepNumber} ➔ #${nextPt.stepNumber}`;
 
           if (pt.category === 'flight' || nextPt.category === 'flight') {
             lineColor = '#a855f7'; // Purple for Flight
             dashArray = '10, 10';
             weight = 5;
+            legTitle = `✈️ Tratta Volo Aereo (${pt.nameIt} ➔ ${nextPt.nameIt})`;
           } else if (pt.category === 'train' || nextPt.category === 'train') {
             lineColor = '#2563eb'; // Deep Blue for Train/Shinkansen
             weight = 4;
+            legTitle = `🚆 Treno JR / Shinkansen (${pt.nameIt} ➔ ${nextPt.nameIt})`;
           } else if (pt.category === 'subway' || nextPt.category === 'subway') {
             lineColor = '#06b6d4'; // Cyan for Metro
             weight = 4;
+            legTitle = `🚇 Spostamento in Metropolitana (${pt.nameIt} ➔ ${nextPt.nameIt})`;
           } else if (pt.category === 'taxi' || nextPt.category === 'taxi') {
             lineColor = '#f59e0b'; // Amber for Taxi
             weight = 4;
+            legTitle = `🚕 Spostamento in Taxi/Navetta (${pt.nameIt} ➔ ${nextPt.nameIt})`;
           } else if (pt.category === 'walk' || nextPt.category === 'walk') {
             lineColor = '#10b981'; // Emerald Green for Walking
             dashArray = '4, 4';
             weight = 3;
+            legTitle = `🚶 Passeggiata a piedi (${pt.nameIt} ➔ ${nextPt.nameIt})`;
           }
 
-          L.polyline(segmentCoords, {
+          const line = L.polyline(segmentCoords, {
             color: lineColor,
             weight,
             opacity: 0.85,
             dashArray
           }).addTo(polylinesLayer.current);
+
+          line.bindTooltip(legTitle, { sticky: true });
         }
       }
 
