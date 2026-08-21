@@ -6,6 +6,7 @@ import {
   generateAIItinerary, 
   replanSingleDayWithAI,
   inferTripDates,
+  formatItalianDate,
   AIItineraryResponse, 
   AIDaySchedule,
   AIItineraryItem,
@@ -216,10 +217,10 @@ export default function AIItineraryGenerator({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-6">
         <div>
           <div className="flex items-center gap-2 mb-1 text-xs font-bold text-indigo-400 uppercase tracking-wider">
-            <span>📖 Diario di Viaggio Registrato & Persistente</span>
+            <span>📖 Diario di Viaggio Registrato con Date Effettive</span>
             {itinerary && (
               <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px]">
-                Sincronizzato con la Mappa • Salvato sul Dispositivo
+                Date reali dal {formatItalianDate(startDate)} al {formatItalianDate(endDate)}
               </span>
             )}
           </div>
@@ -227,7 +228,7 @@ export default function AIItineraryGenerator({
             Diario di Viaggio & Concierge al Volo
           </h3>
           <p className="text-slate-400 text-xs md:text-sm mt-1">
-            L'itinerario rimane salvato sul tuo dispositivo. Puoi aggiungere o eliminare manualemente qualsiasi tappa e la Mappa ricalcolerà la rotta in automatico.
+            L'itinerario è organizzato per date reali (es. 22/11/2026), sincronizzato con la Mappa e modificabile manualemente o con l'AI.
           </p>
         </div>
 
@@ -274,7 +275,7 @@ export default function AIItineraryGenerator({
               type="date"
               value={startDate}
               onChange={e => setStartDate(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-indigo-500"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-indigo-500 font-bold"
             />
           </div>
 
@@ -284,7 +285,7 @@ export default function AIItineraryGenerator({
               type="date"
               value={endDate}
               onChange={e => setEndDate(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-indigo-500"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-indigo-500 font-bold"
             />
           </div>
 
@@ -350,7 +351,7 @@ export default function AIItineraryGenerator({
             Nessun Diario di Viaggio registrato al momento.
           </p>
           <p className="max-w-xl mx-auto text-slate-400 leading-relaxed text-xs">
-            Clicca su <strong className="text-indigo-300">"✨ Genera Diario di Viaggio AI"</strong> per creare il tuo piano registrato dal <strong className="text-indigo-300">{startDate}</strong> al <strong className="text-indigo-300">{endDate}</strong>.
+            Clicca su <strong className="text-indigo-300">"✨ Genera Diario di Viaggio AI"</strong> per creare il tuo piano dal <strong className="text-indigo-300">{formatItalianDate(startDate)}</strong> al <strong className="text-indigo-300">{formatItalianDate(endDate)}</strong>.
           </p>
         </div>
       )}
@@ -359,7 +360,7 @@ export default function AIItineraryGenerator({
       {isLoading && (
         <div className="p-8 text-center bg-slate-900/40 rounded-2xl border border-indigo-500/20 text-slate-300 text-xs md:text-sm space-y-4 animate-pulse">
           <div className="text-3xl animate-bounce">🤖</div>
-          <p className="font-bold text-indigo-400">Generazione e sincronizzazione del Diario di Viaggio in corso ({startDate} ➔ {endDate})...</p>
+          <p className="font-bold text-indigo-400">Generazione Diario dal {formatItalianDate(startDate)} al {formatItalianDate(endDate)}...</p>
         </div>
       )}
 
@@ -390,7 +391,7 @@ export default function AIItineraryGenerator({
             </div>
           </div>
 
-          {/* Days Selection Tabs */}
+          {/* Days Selection Tabs with Exact Formatted Italian Dates */}
           <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
             {itinerary.days.map((day) => (
               <button
@@ -402,7 +403,7 @@ export default function AIItineraryGenerator({
                     : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
                 }`}
               >
-                <span>🗓️ Giorno {day.dayNumber}</span>
+                <span>📅 {day.formattedDate || day.date}</span>
                 <span className="text-[10px] opacity-75 font-normal">({day.city})</span>
               </button>
             ))}
@@ -417,12 +418,18 @@ export default function AIItineraryGenerator({
               return (
                 <div key={day.dayNumber} className="space-y-6">
                   
-                  {/* Day Header Info & Manual Add Button */}
+                  {/* Day Header Info & Formatted Date */}
                   <div className="bg-slate-900/60 p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row justify-between md:items-center gap-4">
                     <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2.5 py-0.5 rounded-md bg-indigo-950 text-indigo-300 font-extrabold text-xs border border-indigo-800/60">
+                          📅 {day.formattedDate || day.date}
+                        </span>
+                        <span className="text-xs text-slate-400">Giorno {day.dayNumber}</span>
+                      </div>
                       <h4 className="text-lg font-bold text-white">{day.title}</h4>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        📅 Data: <strong className="text-slate-200">{day.date}</strong> • Città: <strong className="text-indigo-400">{day.city}</strong> {day.accommodationName ? `• Hotel: ${day.accommodationName}` : ''}
+                        📍 Città: <strong className="text-indigo-400">{day.city}</strong> {day.accommodationName ? `• Hotel: ${day.accommodationName}` : ''}
                       </p>
                     </div>
 
@@ -439,11 +446,11 @@ export default function AIItineraryGenerator({
                   <div className="p-5 rounded-2xl bg-gradient-to-r from-purple-950/50 via-slate-900 to-indigo-950/50 border border-purple-500/40 space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-purple-300 font-extrabold text-xs">
-                        <span>⚡ Assistente Concierge AI in Tempo Reale (Modifica Giorno {day.dayNumber} al Volo)</span>
+                        <span>⚡ Assistente Concierge AI in Tempo Reale ({day.formattedDate || day.date})</span>
                       </div>
                       {isReplanning && (
                         <span className="text-xs text-amber-300 animate-pulse font-bold">
-                          Rielaborazione e salvataggio in corso...
+                          Rielaborazione in corso...
                         </span>
                       )}
                     </div>
@@ -482,7 +489,7 @@ export default function AIItineraryGenerator({
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="es. Vorrei sostituire il tempio con una lezione di cucina o un cat café..."
+                        placeholder="es. Vorrei sostituire il tempio con una lezione di cucina..."
                         value={replanPromptMap[day.dayNumber] || ''}
                         onChange={e => setReplanPromptMap({ ...replanPromptMap, [day.dayNumber]: e.target.value })}
                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleReplanDay(day); }}}
@@ -494,18 +501,20 @@ export default function AIItineraryGenerator({
                         disabled={isReplanning || !replanPromptMap[day.dayNumber]?.trim()}
                         className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50"
                       >
-                        🔄 Rielabora Giorno {day.dayNumber}
+                        🔄 Rielabora
                       </button>
                     </div>
                   </div>
 
-                  {/* Timeline Items with Delete & Manual Edit */}
+                  {/* Timeline Items */}
                   <div className="space-y-3 relative before:absolute before:left-6 before:top-4 before:bottom-4 before:w-0.5 before:bg-slate-800">
                     {day.timeline.map((item, idx) => (
                       <div 
                         key={idx} 
                         className={`p-4 rounded-2xl border relative pl-12 transition-all ${
-                          item.type === 'transit'
+                          item.transitType === 'flight'
+                            ? 'bg-purple-950/80 border-purple-500/50 text-purple-200'
+                            : item.type === 'transit'
                             ? 'bg-slate-950/80 border-slate-800/80 text-blue-300'
                             : item.type === 'meal'
                             ? 'bg-slate-900/90 border-amber-500/30 text-amber-200'
@@ -515,7 +524,8 @@ export default function AIItineraryGenerator({
                         }`}
                       >
                         <div className="absolute left-4 top-4 text-base">
-                          {item.type === 'transit' ? '🚇' :
+                          {item.transitType === 'flight' ? '✈️' :
+                           item.type === 'transit' ? '🚆' :
                            item.type === 'meal' ? '🍜' :
                            item.type === 'break' ? '☕' : '📍'}
                         </div>

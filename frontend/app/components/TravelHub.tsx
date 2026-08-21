@@ -376,8 +376,12 @@ export default function TravelHub() {
         </div>
       </div>
 
-      {/* Synchronized Map */}
-      <MapComponent itinerary={activeItinerary} selectedDayNumber={selectedDayNumber} />
+      {/* Synchronized Map with Time-lapse Stepper */}
+      <MapComponent 
+        itinerary={activeItinerary} 
+        selectedDayNumber={selectedDayNumber} 
+        onSelectDayChange={setSelectedDayNumber}
+      />
 
       {/* Tabs Navigation */}
       <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-4">
