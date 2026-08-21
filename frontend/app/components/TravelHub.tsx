@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { TravelData, FlightTicket, Accommodation, PlaceToVisit } from '../types/travel';
 import { loadTravelData, saveTravelData, resetTravelData } from '../utils/travelStorage';
 import { searchWithAI, AISearchResult } from '../utils/aiSearch';
+import AIItineraryGenerator from './AIItineraryGenerator';
 
-type ActiveTab = 'flights' | 'accommodations' | 'places';
+type ActiveTab = 'flights' | 'accommodations' | 'places' | 'itinerary';
 
 export default function TravelHub() {
   const [data, setData] = useState<TravelData | null>(null);
@@ -520,6 +521,17 @@ export default function TravelHub() {
             {data.places.length}
           </span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('itinerary')}
+          className={`flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-all ${
+            activeTab === 'itinerary'
+              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/30'
+              : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <span>🤖 Itinerario & Spostamenti AI</span>
+        </button>
       </div>
 
       {/* TAB 1: FLIGHTS */}
@@ -792,6 +804,19 @@ export default function TravelHub() {
             </div>
           )}
         </div>
+      )}
+
+      {/* TAB 4: AI ITINERARY & FEASIBILITY PLANNER */}
+      {activeTab === 'itinerary' && (
+        <AIItineraryGenerator 
+          travelData={data} 
+          onAddSuggestedPlace={(suggestedPlace) => {
+            updateData({
+              ...data,
+              places: [...data.places, suggestedPlace]
+            });
+          }} 
+        />
       )}
 
       {/* MODAL 1: ADD/EDIT FLIGHT */}

@@ -20,4 +20,17 @@ export class AIController {
       );
     }
   }
+
+  @Post('generate-itinerary')
+  async generateItinerary(@Body() tripData: any) {
+    try {
+      const result = await this.aiService.generateItineraryPlan(tripData);
+      return { success: true, data: result };
+    } catch (error: any) {
+      throw new HttpException(
+        error?.message || 'Failed to generate AI itinerary',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 }
