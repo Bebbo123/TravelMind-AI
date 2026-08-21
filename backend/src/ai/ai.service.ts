@@ -142,22 +142,24 @@ PREFERENZE UTENTE:
 - Note & Istruzioni Custom: ${preferences.customInstructions || 'Nessuna'}
 
 DATI REALI SALVATI DALL'UTENTE:
-VOLI: ${JSON.stringify(tripData.flights || [])}
-ALLOGGI: ${JSON.stringify(tripData.accommodations || [])}
-LUOGHI DA VISITARE: ${JSON.stringify(tripData.places || [])}
+VOLI SALVATI: ${JSON.stringify(tripData.flights || [])}
+ALLOGGI SALVATI: ${JSON.stringify(tripData.accommodations || [])}
+LUOGHI DA VISITARE SALVATI: ${JSON.stringify(tripData.places || [])}
 
-REGOLE TASSATIVE SGLI SPOSTAMENTI HOTEL & AEROPORTO:
-1. SPOSTAMENTO AEROPORTO ➔ HOTEL: Nel giorno di arrivo, includi tassativamente nella timeline l'orario e il mezzo esatto per andare dall'aeroporto di arrivo (es. Haneda/Narita) al primo hotel (es. Keikyu Express, Tokyo Monorail o Narita Express) con durata e costo.
-2. SPOSTAMENTO HOTEL ➔ HOTEL (CAMBIO CITTÀ): Nei giorni di cambio alloggio (es. quando si passa da Tokyo a Kyoto), includi nella timeline l'orario esatto di Check-out dall'Hotel 1, il trasferimento alla Stazione dei treni (es. Stazione di Tokyo), il treno Shinkansen/espresso da prendere con la durata esatta (es. 2h15m), l'arrivo alla Stazione di destinazione e il trasferimento al nuovo Hotel 2 con indicazione per il deposito bagagli.
-3. SPOSTAMENTO HOTEL ➔ AEROPORTO: Nel giorno di partenza, calcola l'orario di trasferimento dall'ultimo hotel all'aeroporto di partenza con almeno 3 ore di anticipo rispetto all'orario del volo.
+REGOLE FONDAMENTALI SULLA GESTIONE DEI VOLI, SCALI E VOLI NOTTURNI:
+1. RICONOSCIMENTO SCALI & VOLI CON COINCIDENZA: Analizza attentamente tutti i voli salvati. Se l'utente ha più tratte di andata (es. Milano ➔ Abu Dhabi e poi Abu Dhabi ➔ Tokyo), NON confondere le tratte intermedie con l'atterraggio finale a destinazione.
+   - Identifica la partenza iniziale dal paese di origine.
+   - Mostra nella timeline del Giorno 1 le tratte intermedie, la durata dello scalo in aeroporto e l'atterraggio FINALE a destinazione.
+2. VOLI NOTTURNI (OVERNIGHT FLIGHTS): Se un volo parte la sera/notte (es. ore 21:00 o 23:00 del Giorno 1) e atterra il giorno successivo (+1 giorno), NON programmare visite guidate o attività in città durante la notte mentre l'utente si trova in volo!
+   - Nella timeline del Giorno 1 mostra: "Partenza Volo Intercontinentale Notturno ✈️ - Pernottamento e riposo a bordo dell'aereo".
+   - Le attività turistiche ed il trasferimento in hotel devono iniziare SOLTANTO dopo l'orario e la data REALE di atterraggio finale a destinazione nel Giorno 2.
+3. SPOSTAMENTO AEROPORTO ➔ HOTEL: Nel giorno di arrivo REALE a destinazione, includi nella timeline l'orario e il mezzo esatto per andare dall'aeroporto di arrivo (es. Haneda/Narita) al primo hotel.
+4. SPOSTAMENTO HOTEL ➔ HOTEL (CAMBIO CITTÀ): Nei giorni di cambio alloggio (es. da Tokyo a Kyoto), includi la timeline del Check-out, il trasferimento alla Stazione, il treno Shinkansen e il check-in nel nuovo hotel.
+5. SPOSTAMENTO HOTEL ➔ AEROPORTO: Nel giorno di partenza di ritorno, calcola il trasferimento dall'ultimo hotel all'aeroporto con almeno 3 ore di anticipo.
 
 Istruzioni di Generazione:
 1. Genera l'itinerario per OGNI giorno tra la data inizio e fine (Giorno 1 ... Giorno N).
-2. Per ogni giorno includi timeline oraria con:
-   - Tappe e luoghi da visitare presenti nella lista.
-   - Spostamenti dettagliati con mezzi di trasporto (treni JR, metropolitane, Shinkansen, bus) e tempi in minuti.
-   - Pause pranzo e cena in base al ritmo scelto e agli interessi.
-   - Avvisi di fattibilità ("feasibilityWarning") se una tappa è troppo stancante, lontana o densa.
+2. Per ogni giorno includi timeline oraria coerente con la presenza o meno dei voli.
 3. Fornisci 3 o 4 suggerimenti di "suggestedNewPlaces" extra vicini alle tappe visitate ma non ancora salvati.
 
 Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:

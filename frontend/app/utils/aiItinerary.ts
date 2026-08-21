@@ -51,24 +51,23 @@ export function inferTripDates(tripData: TravelData): { startDate: string; endDa
   let startDate = '2026-10-10';
   let endDate = '2026-10-20';
 
-  if (tripData.flights && tripData.flights.length > 0) {
-    const mainFlight = tripData.flights[0];
-    if (mainFlight.departureTime) {
-      startDate = mainFlight.departureTime.slice(0, 10);
+  const sortedFlights = [...(tripData.flights || [])].sort(
+    (a, b) => new Date(a.departureTime).getTime() - new Date(b.departureTime).getTime()
+  );
+
+  if (sortedFlights.length > 0) {
+    if (sortedFlights[0].departureTime) {
+      startDate = sortedFlights[0].departureTime.slice(0, 10);
+    }
+    const lastFlight = sortedFlights[sortedFlights.length - 1];
+    if (lastFlight.arrivalTime || lastFlight.departureTime) {
+      endDate = (lastFlight.arrivalTime || lastFlight.departureTime).slice(0, 10);
     }
   } else if (tripData.accommodations && tripData.accommodations.length > 0) {
     startDate = tripData.accommodations[0].checkIn;
-  }
-
-  if (tripData.accommodations && tripData.accommodations.length > 0) {
     const lastAcc = tripData.accommodations[tripData.accommodations.length - 1];
     if (lastAcc.checkOut) {
       endDate = lastAcc.checkOut;
-    }
-  } else if (tripData.flights && tripData.flights.length > 1) {
-    const returnFlight = tripData.flights[tripData.flights.length - 1];
-    if (returnFlight.departureTime) {
-      endDate = returnFlight.departureTime.slice(0, 10);
     }
   }
 
@@ -97,7 +96,7 @@ export async function generateAIItinerary(
     }
   }
 
-  // --- Dynamic Multi-Day Client Fallback Engine ---
+  // --- Multi-Day Client Fallback Engine with Intelligent Flight & Layover Parsing ---
   const dates = preferences ? { startDate: preferences.startDate, endDate: preferences.endDate } : inferTripDates(tripData);
   
   const start = new Date(dates.startDate || '2026-10-10');
@@ -105,14 +104,24 @@ export async function generateAIItinerary(
   
   let totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   if (isNaN(totalDays) || totalDays < 1) totalDays = 7;
-  if (totalDays > 30) totalDays = 30; // safety ceiling
+  if (totalDays > 30) totalDays = 30;
 
-  const flights = tripData.flights || [];
+  const flights = [...(tripData.flights || [])].sort(
+    (a, b) => new Date(a.departureTime).getTime() - new Date(b.departureTime).getTime()
+  );
   const accs = tripData.accommodations || [];
   const places = tripData.places || [];
 
-  const mainFlight = flights[0];
-  const returnFlight = flights.length > 1 ? flights[flights.length - 1] : null;
+  const outboundFlights = flights.slice(0, Math.max(1, Math.floor(flights.length / 2)));
+  const inboundFlights = flights.length > 1 ? flights.slice(Math.floor(flights.length / 2)) : [];
+
+  const mainOutbound = outboundFlights[0];
+  const finalOutbound = outboundFlights[outboundFlights.length - 1] || mainOutbound;
+  const mainInbound = inboundFlights[inboundFlights.length - 1];
+
+  // Check if main outbound flight is an overnight flight (+1 day arrival)
+  const isOvernightOutbound = mainOutbound?.departureTime && finalOutbound?.arrivalTime &&
+    new Date(finalOutbound.arrivalTime).getDate() !== new Date(mainOutbound.departureTime).getDate();
 
   const days: AIDaySchedule[] = [];
   let previousAccName = '';
@@ -123,7 +132,6 @@ export async function generateAIItinerary(
     const dateStr = current.toISOString().slice(0, 10);
     const dayNumber = i + 1;
 
-    // Distribute city and accommodations across trip duration
     const currentAcc = accs.find(a => {
       if (!a.checkIn || !a.checkOut) return false;
       return dateStr >= a.checkIn && dateStr <= a.checkOut;
@@ -132,33 +140,59 @@ export async function generateAIItinerary(
     const currentCity = currentAcc.city || (i < totalDays / 2 ? 'Tokyo' : 'Kyoto');
     const cityPlaces = places.filter(p => p.city.toLowerCase() === currentCity.toLowerCase());
     
-    // Assign 1 or 2 places per day
     const dayPlaces = cityPlaces.slice((i * 2) % (cityPlaces.length || 1), ((i * 2) % (cityPlaces.length || 1)) + 2);
     const primaryPlace = dayPlaces[0] || places[i % (places.length || 1)] || { name: 'Esplorazione Quartiere', category: 'Quartiere/Shopping' };
     const secondaryPlace = dayPlaces[1];
 
     const isFirstDay = i === 0;
+    const isArrivalDay = isOvernightOutbound ? i === 1 : i === 0;
     const isLastDay = i === totalDays - 1;
-    const isHotelChangeDay = previousAccName && previousAccName !== currentAcc.name;
+    const isHotelChangeDay = previousAccName && previousAccName !== currentAcc.name && !isFirstDay;
 
     const timeline: AIItineraryItem[] = [];
 
-    if (isFirstDay) {
+    if (isFirstDay && isOvernightOutbound) {
+      // Day 1: Overnight Flight Departure & Layovers
       timeline.push({
-        time: '08:20',
-        activity: `Atterraggio Volo a ${mainFlight?.destination || 'Tokyo Haneda (HND)'}`,
+        time: mainOutbound?.departureTime ? new Date(mainOutbound.departureTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '21:00',
+        activity: `Partenza Volo da ${mainOutbound?.origin || 'Milano (MXP)'} (Volo ${mainOutbound?.flightNumber || ''})`,
+        type: 'transit',
+        transitDetail: `Compagnia: ${mainOutbound?.airline || 'Aerea'}. Presentati al Terminal ${mainOutbound?.terminal || '1'} almeno 3 ore prima.`
+      });
+
+      if (outboundFlights.length > 1) {
+        const layoverFlight = outboundFlights[1];
+        timeline.push({
+          time: '04:00 - 07:00',
+          activity: `🔄 Scalo Coincidenza presso Aeroporto di ${mainOutbound?.destination || 'Transit'}`,
+          type: 'break',
+          transitDetail: `Tempo di attesa coincidenza per volo ${layoverFlight?.flightNumber || ''} diretto a destinazione finale.`
+        });
+      }
+
+      timeline.push({
+        time: '22:00 - 08:00',
+        activity: '🌙 Volo Notturno Intercontinentale in Aereo',
+        type: 'break',
+        transitDetail: 'Pernottamento e riposo a bordo del volo.'
+      });
+    } else if (isArrivalDay) {
+      // Arrival at destination day
+      timeline.push({
+        time: finalOutbound?.arrivalTime ? new Date(finalOutbound.arrivalTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '08:20',
+        activity: `🛬 Atterraggio FINALE a ${finalOutbound?.destination || 'Tokyo Haneda (HND)'}`,
         type: 'place',
-        placeName: mainFlight?.destination || 'Aeroporto'
+        placeName: finalOutbound?.destination || 'Aeroporto Destinazione'
       });
       timeline.push({
         time: '09:30 - 10:30',
         activity: `Spostamento Aeroporto ➔ Primo Hotel (${currentAcc.name})`,
         type: 'transit',
-        transitDetail: `Treno Keikyu Airport Line / Tokyo Monorail dall'aeroporto a ${currentAcc.name} (45 min, ~¥650). In stazione ritira la carta SUICA/PASMO.`
+        transitDetail: `Treno Keikyu Airport Line / Tokyo Monorail / Narita Express verso ${currentAcc.name} (45 min, ~¥650). Ritira la carta SUICA/PASMO.`
       });
       timeline.push({
         time: '11:00 - 12:30',
-        activity: `Check-in o Deposito Valigie presso ${currentAcc.name}`,
+        activity: `Check-in / Deposito Valigie presso ${currentAcc.name}`,
         type: 'break'
       });
       timeline.push({
@@ -175,7 +209,7 @@ export async function generateAIItinerary(
       });
       timeline.push({
         time: '19:00 - 21:00',
-        activity: 'Cena e rientro in hotel per riposo',
+        activity: 'Cena e rientro in hotel per recuperare il fuso orario',
         type: 'meal',
         mealSuggestion: 'Izakaya locale e spiedini Yakitori'
       });
@@ -193,15 +227,15 @@ export async function generateAIItinerary(
       });
       timeline.push({
         time: '12:30 - 14:00',
-        activity: `Spostamento Hotel ➔ Aeroporto di Partenza (${returnFlight?.origin || 'Tokyo'})`,
+        activity: `Spostamento Hotel ➔ Aeroporto di Partenza (${mainInbound?.origin || 'Tokyo'})`,
         type: 'transit',
         transitDetail: `Treno Narita Express / Haruka Express verso l'aeroporto (60 min, ¥1,200). Arrivo consigliato 3 ore prima del volo.`
       });
       timeline.push({
-        time: '16:00',
-        activity: `Volo di Ritorno ${returnFlight?.flightNumber || ''}`,
+        time: mainInbound?.departureTime ? new Date(mainInbound.departureTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '16:00',
+        activity: `🛫 Volo di Ritorno ${mainInbound?.flightNumber || ''} (${mainInbound?.origin || ''} ➔ ${mainInbound?.destination || ''})`,
         type: 'place',
-        placeName: returnFlight?.origin || 'Aeroporto'
+        placeName: mainInbound?.origin || 'Aeroporto'
       });
     } else if (isHotelChangeDay) {
       // Hotel Transfer / City Transition Day
@@ -298,12 +332,18 @@ export async function generateAIItinerary(
     days.push({
       dayNumber,
       date: dateStr,
-      title: isHotelChangeDay 
+      title: isFirstDay && isOvernightOutbound 
+        ? `Giorno 1: Partenza & Volo Notturno Intercontinentale`
+        : isArrivalDay && isOvernightOutbound
+        ? `Giorno 2: Atterraggio a ${currentCity} & Check-in Hotel`
+        : isHotelChangeDay 
         ? `Giorno ${dayNumber}: Trasferimento a ${currentCity} & ${primaryPlace.name}`
         : `Giorno ${dayNumber}: ${primaryPlace.name} (${currentCity})`,
       city: currentCity,
       accommodationName: currentAcc.name,
-      dailyFeasibilitySummary: isHotelChangeDay
+      dailyFeasibilitySummary: isFirstDay && isOvernightOutbound
+        ? `Volo Notturno con Scalo: Imbarco la sera e pernottamento in aereo.`
+        : isHotelChangeDay
         ? `Spostamento Interurbano: Trasferimento da ${previousAccName} a ${currentAcc.name} con Shinkansen/treno rapido.`
         : `Spostamenti integrati con l'hotel ${currentAcc.name}.`,
       timeline
@@ -345,7 +385,7 @@ export async function generateAIItinerary(
 
   return {
     globalFeasibilityRating: preferences?.pace === 'Intenso' ? 'Troppo Densa' : 'Ottima',
-    globalFeasibilityNotes: `Itinerario generato per tutti i ${totalDays} giorni di viaggio (${dates.startDate} - ${dates.endDate}). Inclusi trasferimenti Aeroporto ➔ Hotel, cambio città Hotel ➔ Hotel e Hotel ➔ Aeroporto.`,
+    globalFeasibilityNotes: `Itinerario generato per tutti i ${totalDays} giorni di viaggio (${dates.startDate} - ${dates.endDate}). Inclusi voli notturni, scali, trasferimenti Aeroporto ➔ Hotel e cambio città tra hotel.`,
     days,
     suggestedNewPlaces
   };
