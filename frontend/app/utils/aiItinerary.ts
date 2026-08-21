@@ -86,6 +86,67 @@ export function inferTripDates(tripData: TravelData): { startDate: string; endDa
   return { startDate, endDate };
 }
 
+interface RealRoute {
+  activity: string;
+  detail: string;
+  durationMinutes: number;
+  costEstimateYen: number;
+  transitType: 'train' | 'subway' | 'flight';
+}
+
+function getRealInterCityTransit(fromCity: string, toCity: string): RealRoute {
+  const from = fromCity.toLowerCase();
+  const to = toCity.toLowerCase();
+
+  if (from.includes('tokyo') && to.includes('kyoto')) {
+    return {
+      activity: '🚆 Spostamento Shinkansen: Stazione di Tokyo ➔ Stazione di Kyoto (Treno Veloce JR Nozomi)',
+      detail: 'Linea JR Tokaido Shinkansen Nozomi (2h 15m, posti riservati). Suggerita spedizione bagagli Takkyubin.',
+      durationMinutes: 135,
+      costEstimateYen: 13870,
+      transitType: 'train'
+    };
+  }
+
+  if (from.includes('kyoto') && to.includes('osaka')) {
+    return {
+      activity: '🚆 Spostamento Treno: Stazione di Kyoto ➔ Stazione di Osaka/Namba (JR Special Rapid)',
+      detail: 'Linea JR Kyoto Special Rapid / Hankyu Railway (29m diretti tra le due stazioni).',
+      durationMinutes: 30,
+      costEstimateYen: 570,
+      transitType: 'train'
+    };
+  }
+
+  if (from.includes('osaka') && to.includes('tokyo')) {
+    return {
+      activity: '🚆 Spostamento Shinkansen: Stazione Shin-Osaka ➔ Stazione di Tokyo (Treno Veloce JR Nozomi)',
+      detail: 'Linea JR Tokaido Shinkansen (2h 25m diretti con vista sul Monte Fuji).',
+      durationMinutes: 145,
+      costEstimateYen: 14450,
+      transitType: 'train'
+    };
+  }
+
+  if (from.includes('taipei') && to.includes('tokyo')) {
+    return {
+      activity: '✈️ Volo Aereo: Aeroporto di Taipei-Taoyuan (TPE) ➔ Aeroporto di Tokyo Narita (NRT)',
+      detail: 'Volo regionale diretto (3h 30m di volo).',
+      durationMinutes: 210,
+      costEstimateYen: 25000,
+      transitType: 'flight'
+    };
+  }
+
+  return {
+    activity: `🚆 Spostamento Treno Express: ${fromCity} ➔ ${toCity}`,
+    detail: `Collegamento ferroviario diretto tra ${fromCity} e ${toCity} (~1h 30m).`,
+    durationMinutes: 90,
+    costEstimateYen: 3500,
+    transitType: 'train'
+  };
+}
+
 export async function generateAIItinerary(
   tripData: TravelData,
   preferences?: TripPreferences
@@ -114,7 +175,7 @@ export async function generateAIItinerary(
     }
   }
 
-  // --- Dynamic Multi-Flight & Overnight Splitter Engine ---
+  // --- Dynamic Multi-Flight, Hotel Transfer & Real Transit Engine ---
   const dates = preferences ? { startDate: preferences.startDate, endDate: preferences.endDate } : inferTripDates(tripData);
   
   const start = new Date(dates.startDate || '2026-10-22');
@@ -131,7 +192,7 @@ export async function generateAIItinerary(
   const places = tripData.places || [];
 
   const days: AIDaySchedule[] = [];
-  let previousAccName = '';
+  let previousAcc: any = null;
 
   for (let i = 0; i < totalDays; i++) {
     const current = new Date(start);
@@ -143,7 +204,7 @@ export async function generateAIItinerary(
     // Check if there is a flight departing today
     const flightDepartingToday = flights.find(f => f.departureTime && f.departureTime.slice(0, 10) === dateStr);
     
-    // Check if there is a flight arriving today (whose departure was yesterday or earlier)
+    // Check if there is a flight arriving today
     const flightArrivingToday = flights.find(f => {
       if (!f.arrivalTime) return false;
       const arrDate = f.arrivalTime.slice(0, 10);
@@ -160,6 +221,13 @@ export async function generateAIItinerary(
     if (flightDepartingToday && flightDepartingToday.origin.toLowerCase().includes('roma')) {
       currentCity = 'In Volo (Roma ➔ Taipei)';
     }
+
+    // Detect Hotel Transfer Day (Check-out from previous hotel & Check-in at new hotel in different city)
+    const isHotelTransferDay = previousAcc && 
+      previousAcc.name !== currentAcc.name && 
+      previousAcc.city !== currentAcc.city && 
+      !flightDepartingToday && 
+      !flightArrivingToday;
 
     // Filter places STRICTLY matching the active city! (No Japanese temples in Taipei)
     const cityPlaces = places.filter(p => {
@@ -179,12 +247,10 @@ export async function generateAIItinerary(
     const primaryPlace = dayPlaces[0] || (currentCity.includes('Taipei') ? { name: 'Grattacielo Taipei 101 & Mercato Serale Shilin', category: 'Quartiere/Shopping' } : { name: 'Esplorazione Quartiere', category: 'Quartiere/Shopping' });
     const secondaryPlace = dayPlaces[1];
 
-    const isHotelChangeDay = previousAccName && previousAccName !== currentAcc.name && !flightDepartingToday && !flightArrivingToday;
-
     const timeline: AIItineraryItem[] = [];
 
     if (flightDepartingToday) {
-      // OVERNIGHT FLIGHT DEPARTURE DAY (e.g. 22/10/2026: Rome FCO 11:35 ➔ Abu Dhabi AUH 19:40-21:20 ➔ Night Flight)
+      // OVERNIGHT FLIGHT DEPARTURE DAY
       const depTime = new Date(flightDepartingToday.departureTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
       
       timeline.push({
@@ -192,7 +258,7 @@ export async function generateAIItinerary(
         activity: `🛫 Partenza Volo Aereo ${flightDepartingToday.airline} (${flightDepartingToday.flightNumber}): ${flightDepartingToday.origin} ➔ ${flightDepartingToday.destination}`,
         type: 'transit',
         transitType: 'flight',
-        transitDetail: `Compagnia: ${flightDepartingToday.airline}. Terminal: ${flightDepartingToday.terminal || '3'}. Presentarsi in aeroporto 3 ore prima.`
+        transitDetail: `Compagnia: ${flightDepartingToday.airline}. Terminal: ${flightDepartingToday.terminal || '3'}. Presentarsi 3 ore prima.`
       });
 
       if (flightDepartingToday.layovers && flightDepartingToday.layovers.length > 0) {
@@ -213,11 +279,11 @@ export async function generateAIItinerary(
         activity: '🌙 Volo Notturno Intercontinentale in Aereo',
         type: 'break',
         transitType: 'flight',
-        transitDetail: 'Pernottamento e riposo a bordo del volo. L\'atterraggio avverrà la mattina del giorno successivo.'
+        transitDetail: 'Pernottamento e riposo a bordo del volo.'
       });
 
     } else if (flightArrivingToday) {
-      // OVERNIGHT FLIGHT ARRIVAL DAY (e.g. 23/10/2026: Arrival Taipei TPE 10:00 ➔ Hotel ➔ Taipei afternoon)
+      // OVERNIGHT FLIGHT ARRIVAL DAY
       const arrTime = new Date(flightArrivingToday.arrivalTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
       currentCity = currentAcc.city || flightArrivingToday.destination;
 
@@ -256,45 +322,54 @@ export async function generateAIItinerary(
         mealSuggestion: 'Specialità della cucina locale'
       });
 
-    } else if (isHotelChangeDay) {
-      // Hotel Transfer Day
+    } else if (isHotelTransferDay) {
+      // REAL INTER-CITY HOTEL TRANSFER DAY (Shinkansen / Express Train)
+      const realRoute = getRealInterCityTransit(previousAcc.city, currentAcc.city);
+
       timeline.push({
-        time: '08:30 - 09:00',
-        activity: `Check-out da ${previousAccName} & Trasferimento a Stazione`,
+        time: '09:30 - 10:00',
+        activity: `Check-out da ${previousAcc.name} (${previousAcc.city})`,
+        type: 'break',
+        transitDetail: `Check-out hotel e spostamento in stazione centrale con bagagli.`
+      });
+
+      timeline.push({
+        time: '10:00 - 12:15',
+        activity: realRoute.activity,
         type: 'transit',
-        transitType: 'train',
-        transitDetail: `Treno locale alla stazione centrale (20 min).`
+        transitType: realRoute.transitType,
+        transitDetail: realRoute.detail,
+        costEstimateYen: realRoute.costEstimateYen
       });
+
       timeline.push({
-        time: '09:30 - 11:45',
-        activity: `Spostamento Interurbano: ${previousAccName} ➔ ${currentAcc.name} (${currentCity})`,
-        type: 'transit',
-        transitType: 'train',
-        transitDetail: `Treno veloce Shinkansen/Express (2h15m). Spedizione bagagli Takkyubin.`
+        time: '12:30 - 13:30',
+        activity: `Arrivo a ${currentAcc.city} & Check-in / Deposito Valigie (${currentAcc.name})`,
+        type: 'break',
+        placeName: currentAcc.name
       });
+
       timeline.push({
-        time: '12:00 - 12:45',
-        activity: `Arrivo & Deposito Valigie presso ${currentAcc.name}`,
-        type: 'break'
-      });
-      timeline.push({
-        time: '13:00 - 14:00',
-        activity: `Pranzo a ${currentCity}`,
+        time: '13:30 - 14:30',
+        activity: `Pranzo a ${currentAcc.city}`,
         type: 'meal',
         mealSuggestion: 'Specialità gastronomica della nuova città'
       });
+
       timeline.push({
-        time: '14:30 - 17:30',
-        activity: `Pomeriggio: Visita a ${primaryPlace.name}`,
+        time: '15:00 - 18:00',
+        activity: `Pomeriggio a ${currentAcc.city}: Visita a ${primaryPlace.name}`,
         type: 'place',
         placeName: primaryPlace.name
       });
+
       timeline.push({
         time: '18:30 - 20:30',
-        activity: `Cena a ${currentCity}`,
+        activity: `Cena nei dintorni di ${currentAcc.name}`,
         type: 'meal',
         mealSuggestion: 'Ristorante tipico vicino al nuovo hotel'
       });
+
     } else {
       // Normal Sightseeing Day
       timeline.push({
@@ -351,7 +426,7 @@ export async function generateAIItinerary(
       });
     }
 
-    previousAccName = currentAcc.name;
+    previousAcc = currentAcc;
 
     days.push({
       dayNumber,
@@ -361,8 +436,8 @@ export async function generateAIItinerary(
         ? `${formattedDate} • Partenza Volo ${flightDepartingToday.flightNumber} & Volo Notturno`
         : flightArrivingToday
         ? `${formattedDate} • Atterraggio a ${currentCity} & Check-in Hotel`
-        : isHotelChangeDay
-        ? `${formattedDate} • Trasferimento a ${currentCity} & ${primaryPlace.name}`
+        : isHotelTransferDay
+        ? `${formattedDate} • Trasferimento Shinkansen/Express a ${currentCity} & Check-in ${currentAcc.name}`
         : `${formattedDate} • ${primaryPlace.name} (${currentCity})`,
       city: currentCity,
       accommodationName: currentAcc.name,
@@ -370,8 +445,8 @@ export async function generateAIItinerary(
         ? `Partenza il ${formattedDate}: Volo notturno intercontinentale in aereo.`
         : flightArrivingToday
         ? `Arrivo a ${currentCity} il ${formattedDate}: Atterraggio, check-in e visite pomeridiane.`
-        : isHotelChangeDay
-        ? `Spostamento Interurbano il ${formattedDate}: Trasferimento da ${previousAccName} a ${currentAcc.name}.`
+        : isHotelTransferDay
+        ? `Spostamento Interurbano Reale il ${formattedDate}: Check-out da ${previousAcc.name} e viaggio in Treno Shinkansen per ${currentAcc.name} (${currentCity}).`
         : `Giorno ${formattedDate}: Spostamenti integrati con l'hotel ${currentAcc.name}.`,
       timeline
     });
@@ -412,7 +487,7 @@ export async function generateAIItinerary(
 
   return {
     globalFeasibilityRating: preferences?.pace === 'Intenso' ? 'Troppo Densa' : 'Ottima',
-    globalFeasibilityNotes: `Itinerario generato dal ${formatItalianDate(dates.startDate)} al ${formatItalianDate(dates.endDate)} (${totalDays} giorni). Voli notturni separati correttamente su 2 giorni ed attrazioni abbinate alle rispettive città.`,
+    globalFeasibilityNotes: `Itinerario generato dal ${formatItalianDate(dates.startDate)} al ${formatItalianDate(dates.endDate)} (${totalDays} giorni). Spostamenti reali tra hotel calcolati con treni Shinkansen Nozomi e treni Express.`,
     days,
     suggestedNewPlaces
   };

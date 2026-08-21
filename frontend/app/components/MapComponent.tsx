@@ -5,6 +5,7 @@ import { AIItineraryResponse, AIDaySchedule } from '../utils/aiItinerary';
 
 interface MapPoint {
   id: string;
+  stepNumber: number;
   nameIt: string;
   nameLocal: string;
   category: 'flight' | 'train' | 'subway' | 'taxi' | 'walk' | 'food' | 'hotel' | 'attraction';
@@ -29,6 +30,7 @@ const ACCURATE_KNOWN_LOCATIONS: Record<string, { lat: number; lng: number; nameI
   'taipei 101': { lat: 25.0339, lng: 121.5645, nameIt: 'Grattacielo Taipei 101', nameLocal: '臺北101' },
   'shilin': { lat: 25.0888, lng: 121.5244, nameIt: 'Mercato Serale di Shilin (Taipei)', nameLocal: '士林夜市' },
   'tokyo': { lat: 35.681236, lng: 139.767125, nameIt: 'Stazione di Tokyo', nameLocal: '東京駅' },
+  'edo tokyo': { lat: 35.7118, lng: 139.5132, nameIt: 'Edo Tokyo Open Air Architectural Museum', nameLocal: '江戸東京たてもの園' },
   'shinjuku': { lat: 35.6938, lng: 139.7034, nameIt: 'Shinjuku Prince Hotel', nameLocal: '新宿プリンスホテル' },
   'shibuya': { lat: 35.658034, lng: 139.701636, nameIt: 'Incrocio di Shibuya', nameLocal: '渋谷スクランブル交差点' },
   'asakusa': { lat: 35.714765, lng: 139.796655, nameIt: 'Tempio Sensō-ji (Asakusa)', nameLocal: '浅草寺' },
@@ -41,6 +43,7 @@ const ACCURATE_KNOWN_LOCATIONS: Record<string, { lat: number; lng: number; nameI
   'kyoto': { lat: 34.985849, lng: 135.758767, nameIt: 'Stazione Centrale di Kyoto', nameLocal: '京都駅' },
   'gion': { lat: 35.0037, lng: 135.7772, nameIt: 'Quartiere Gion (Kyoto)', nameLocal: '祇園' },
   'fushimi inari': { lat: 34.96714, lng: 135.772671, nameIt: 'Santuario Fushimi Inari Taisha', nameLocal: '伏見稲荷大社' },
+  'arashiyama': { lat: 35.0117, lng: 135.6777, nameIt: 'Foresta di Bambù di Arashiyama', nameLocal: '嵐山竹林' },
   'osaka': { lat: 34.665809, lng: 135.501175, nameIt: 'Stazione Namba Osaka', nameLocal: '難波駅' },
   'dotonbori': { lat: 34.6687, lng: 135.5013, nameIt: 'Dotonbori (Osaka)', nameLocal: '道頓堀' }
 };
@@ -83,6 +86,7 @@ async function fetchAccurateCoords(name: string, city?: string): Promise<{ lat: 
 export default function MapComponent({ itinerary, selectedDayNumber, onSelectDayChange }: MapComponentProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<any>(null);
+  const tileLayerRef = useRef<any>(null);
   const markersLayer = useRef<any>(null);
   const polylinesLayer = useRef<any>(null);
 
@@ -123,6 +127,31 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
     }
   };
 
+  // Dynamic Tile Layer Switcher based on Map Language
+  useEffect(() => {
+    if (typeof window === 'undefined' || !leafletMap.current) return;
+    import('leaflet').then((L) => {
+      if (tileLayerRef.current) {
+        leafletMap.current.removeLayer(tileLayerRef.current);
+      }
+
+      if (mapLang === 'IT') {
+        // CARTO Voyager Tiles (Latin / Italian Alphabet Map Labels)
+        tileLayerRef.current = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+          subdomains: 'abcd',
+          maxZoom: 19
+        }).addTo(leafletMap.current);
+      } else {
+        // Standard OpenStreetMap Tiles (Native Kanji / Hanzi Local Labels)
+        tileLayerRef.current = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+          maxZoom: 19
+        }).addTo(leafletMap.current);
+      }
+    });
+  }, [mapLang]);
+
   useEffect(() => {
     if (typeof window === 'undefined' || !mapRef.current) return;
 
@@ -138,9 +167,12 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
         });
 
         const map = L.map(mapRef.current!).setView([35.681236, 139.767125], 6);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors',
-          maxZoom: 19,
+        
+        // Default CARTO Voyager Tiles
+        tileLayerRef.current = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+          subdomains: 'abcd',
+          maxZoom: 19
         }).addTo(map);
 
         leafletMap.current = map;
@@ -152,7 +184,7 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
       if (markersLayer.current) markersLayer.current.clearLayers();
       if (polylinesLayer.current) polylinesLayer.current.clearLayers();
 
-      const pointsToPlot: MapPoint[] = [];
+      const rawPoints: MapPoint[] = [];
 
       if (activeDaySchedule && activeDaySchedule.timeline) {
         for (let idx = 0; idx < activeDaySchedule.timeline.length; idx++) {
@@ -179,8 +211,9 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
             cat = 'hotel';
           }
 
-          pointsToPlot.push({
+          rawPoints.push({
             id: `p_${idx}`,
+            stepNumber: idx + 1,
             nameIt: loc.nameIt || item.activity,
             nameLocal: loc.nameLocal || loc.nameIt || item.activity,
             category: cat,
@@ -190,16 +223,26 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
             time: item.time
           });
         }
-      } else {
-        // Fallback default points
-        pointsToPlot.push(
-          { id: 'fco', nameIt: 'Roma Fiumicino (FCO)', nameLocal: 'Aeroporto Roma Fiumicino', category: 'flight', lat: 41.7999, lng: 12.2462, desc: 'Partenza Volo' },
-          { id: 'tpe', nameIt: 'Taipei Taoyuan (TPE)', nameLocal: '桃園國際機場', category: 'flight', lat: 25.0797, lng: 121.2342, desc: 'Scalo / Arrivo Taipei' },
-          { id: 'tokyo', nameIt: 'Stazione Tokyo', nameLocal: '東京駅', category: 'train', lat: 35.681236, lng: 139.767125, desc: 'Hub centrale Tokyo' }
-        );
       }
 
       if (!isMounted) return;
+
+      // Apply Jitter offset to overlapping points so EVERY stop is visually spread out & clickable!
+      const coordCounts: Record<string, number> = {};
+      const pointsToPlot: MapPoint[] = rawPoints.map((pt) => {
+        const key = `${pt.lat.toFixed(4)}_${pt.lng.toFixed(4)}`;
+        const count = coordCounts[key] || 0;
+        coordCounts[key] = count + 1;
+
+        if (count > 0) {
+          // Slight spiral offset for overlapping pins
+          const angle = count * 1.2;
+          const offsetLat = Math.sin(angle) * 0.008 * count;
+          const offsetLng = Math.cos(angle) * 0.008 * count;
+          return { ...pt, lat: pt.lat + offsetLat, lng: pt.lng + offsetLng };
+        }
+        return pt;
+      });
 
       // Render Markers & Color-Coded Polylines by Transport Type
       const allLatLngs: [number, number][] = [];
@@ -220,12 +263,42 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
           pt.category === 'hotel' ? '🏨' :
           pt.category === 'food' ? '🍜' : '📍';
 
-        const marker = L.marker([pt.lat, pt.lng]).addTo(markersLayer.current);
+        // Numbered Badge Custom HTML Marker
+        const customIcon = L.divIcon({
+          className: 'custom-map-pin',
+          html: `
+            <div style="
+              background: #1e293b;
+              border: 2px solid #6366f1;
+              border-radius: 9999px;
+              color: white;
+              font-weight: 800;
+              font-size: 11px;
+              padding: 4px 8px;
+              display: flex;
+              align-items: center;
+              gap: 4px;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+              white-space: nowrap;
+            ">
+              <span style="background: #4f46e5; border-radius: 50%; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px;">${pt.stepNumber}</span>
+              <span>${iconEmoji}</span>
+              <span style="max-width: 110px; overflow: hidden; text-overflow: ellipsis;">${displayName}</span>
+            </div>
+          `,
+          iconSize: [140, 28],
+          iconAnchor: [70, 14]
+        });
+
+        const marker = L.marker([pt.lat, pt.lng], { icon: customIcon }).addTo(markersLayer.current);
         
         const popupContent = `
-          <div style="color: #0f172a; font-family: sans-serif; min-width: 180px;">
-            <strong style="font-size: 13px; display: block; margin-bottom: 4px;">${iconEmoji} ${displayName}</strong>
-            ${pt.time ? `<span style="font-size: 11px; color: #4f46e5; font-weight: bold;">${pt.time}</span>` : ''}
+          <div style="color: #0f172a; font-family: sans-serif; min-width: 190px;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+              <span style="background: #4f46e5; color: white; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;">${pt.stepNumber}</span>
+              <strong style="font-size: 13px;">${iconEmoji} ${displayName}</strong>
+            </div>
+            ${pt.time ? `<span style="font-size: 11px; color: #4f46e5; font-weight: bold;">🕒 ${pt.time}</span>` : ''}
             <p style="font-size: 11px; color: #475569; margin: 4px 0 0 0;">${pt.desc}</p>
           </div>
         `;
@@ -272,9 +345,9 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
 
       // Smooth Fly-to Active Region for Selected Day
       if (allLatLngs.length > 1) {
-        leafletMap.current.fitBounds(L.latLngBounds(allLatLngs), { padding: [50, 50], maxZoom: 12 });
+        leafletMap.current.fitBounds(L.latLngBounds(allLatLngs), { padding: [60, 60], maxZoom: 13 });
       } else if (allLatLngs.length === 1) {
-        leafletMap.current.setView(allLatLngs[0], 11);
+        leafletMap.current.setView(allLatLngs[0], 12);
       }
     });
 
@@ -293,7 +366,7 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
             🗺️ Mappa Principale Viaggio
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Sincronizzata con il giorno attivo • Scomposizione tratte con codifica colori per mezzo
+            Mappa dinamica bilingue (Italiano / Locale) • Tutte le tappe ed i percorsi del giorno
           </p>
         </div>
 
@@ -351,7 +424,7 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
       {/* Single Clean Leaflet Map Div */}
       <div 
         ref={mapRef} 
-        className="w-full h-[400px] md:h-[480px] rounded-2xl overflow-hidden border border-slate-700/60 shadow-inner bg-slate-950 relative"
+        className="w-full h-[420px] md:h-[500px] rounded-2xl overflow-hidden border border-slate-700/60 shadow-inner bg-slate-950 relative"
       />
 
       {/* Selected Point Info Footer */}
@@ -359,6 +432,9 @@ export default function MapComponent({ itinerary, selectedDayNumber, onSelectDay
         <div className="p-4 rounded-xl bg-slate-800/80 border border-slate-700 text-left flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-fadeIn">
           <div>
             <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white font-extrabold text-xs">
+                Tappa #{activePoint.stepNumber}
+              </span>
               <span className="text-xl">
                 {activePoint.category === 'flight' ? '✈️' : activePoint.category === 'train' ? '🚆' : activePoint.category === 'subway' ? '🚇' : activePoint.category === 'taxi' ? '🚕' : activePoint.category === 'walk' ? '🚶' : '📍'}
               </span>

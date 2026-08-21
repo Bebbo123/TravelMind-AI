@@ -143,16 +143,22 @@ PREFERENZE UTENTE:
 - Interessi principali: ${(preferences.interests || []).join(', ') || 'Tutti'}
 - Note & Istruzioni Custom: ${preferences.customInstructions || 'Nessuna'}
 
-DATI REALI SALVATI DALL'UTENTE (ANALIZZA ATTENTAMENTE LE DATE E GLI ORARI DEI VOLI):
+DATI REALI SALVATI DALL'UTENTE (ANALIZZA ATTENTAMENTE LE DATE DEGLI HOTEL E DEI VOLI):
 VOLI SALVATI: ${JSON.stringify(tripData.flights || [])}
 ALLOGGI SALVATI: ${JSON.stringify(tripData.accommodations || [])}
 LUOGHI DA VISITARE SALVATI: ${JSON.stringify(tripData.places || [])}
 
-REGOLE TASSATIVE SUI VOLI NOTTURNI E CORRISPONDENZA CITTÀ:
-1. GESTIONE VOLO NOTTURNO SU 2 GIORNI: Se un volo parte la mattina/pomeriggio/sera del Giorno 1 (es. 22/10 ore 11:35 da Roma) e atterra la mattina del Giorno 2 (es. 23/10 ore 10:00 a Taipei):
-   - La timeline del Giorno 1 (22/10) DEVE contenere la partenza dal primo aeroporto, gli scali intermedi e terminare con la notte in aereo ("🌙 Volo Notturno Intercontinentale in Aereo"). NON INSERIRE L'ATTERRAGGIO A DESTINAZIONE O VISITE IN CITTÀ IL GIORNO 1!
-   - La timeline del Giorno 2 (23/10) DEVE INIZIARE alle ore 10:00 con l'atterraggio a destinazione, seguito dal trasferimento all'hotel e dal check-in prima delle visite turistiche!
-2. COERENZA ATTRAZIONI E CITTÀ: Associa le attrazioni ESCLUSIVAMENTE alla città e al paese corretto in cui si trova l'utente per quella data. Ad esempio, attrazioni giapponesi (es. Kamakura o Hokokuji) NON devono MAI essere posizionate a Taipei (Taiwan)!
+REGOLE TASSATIVE PER SPOSTAMENTI REALI TRA ALLOGGI & CITTÀ:
+1. GESTIONE CAMBIO HOTEL / CITTÀ: Analizza le date di check-in e check-out degli alloggi. Nei giorni in cui il soggiorno passa dall'Hotel A dell'Hotel B nella nuova città:
+   - Inserisci il Check-out da Hotel A alle 09:30.
+   - Inserisci lo SPOSTAMENTO REALE ED ESISTENTE (Nessuna proposta fittizia! Usare tratte ufficiali):
+     * Tokyo ➔ Kyoto: JR Tokaido Shinkansen Nozomi (Stazione di Tokyo ➔ Stazione di Kyoto, 2h 15m, ¥13.870)
+     * Kyoto ➔ Osaka: JR Special Rapid Line (Stazione di Kyoto ➔ Stazione di Osaka/Namba, 29m, ¥570)
+     * Aeroporto Taipei ➔ Taipei Centro: Taoyuan Airport MRT Express (35m, NT$160)
+     * Tokyo Centro ➔ Aeroporto Narita: JR Narita Express N'EX / Keisei Skyliner (50m, ¥3.070)
+     * Osaka Centro ➔ Aeroporto Kansai KIX: JR Haruka Express (50m, ¥1.800)
+   - Inserisci il Deposito Valigie / Check-in presso Hotel B ed il pomeriggio di visite nella nuova città.
+2. VOLI NOTTURNI SU 2 GIORNI: Se un volo parte la sera del Giorno 1 e atterra la mattina del Giorno 2, dividi la timeline tra il volo/scalo notturno (Giorno 1) e l'atterraggio/check-in hotel (Giorno 2).
 
 Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
 {
@@ -169,7 +175,7 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
       "dailyFeasibilitySummary": "...",
       "timeline": [
         {
-          "time": "11:35 - 19:40",
+          "time": "10:00 - 12:15",
           "activity": "...",
           "type": "place | transit | meal | break",
           "transitType": "flight | train | subway | taxi | walk",
@@ -219,7 +225,7 @@ SCHEDULE ATTUALE DEL GIORNO: ${JSON.stringify(req.currentDaySchedule)}
 DATI VIAGGIO: ${JSON.stringify(req.travelData)}
 
 Istruzioni:
-1. Rielabora la timeline della giornata mantenendo coerenza con i voli e la città di destinazione.
+1. Rielabora la timeline della giornata mantenendo coerenza con gli spostamenti reali in treno Shinkansen o volo aereo.
 2. Associa attrazioni coerenti con la città in cui si trova l'utente per quel giorno.
 
 Restituisci ESCLUSIVAMENTE l'oggetto JSON della giornata rielaborata rispettando questo schema:
