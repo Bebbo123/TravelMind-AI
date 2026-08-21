@@ -33,7 +33,7 @@ export interface AIItineraryItem {
   mealSuggestion?: string;
   costEstimateYen?: number;
   feasibilityWarning?: string;
-  transitType?: 'flight' | 'train' | 'bus' | 'walk';
+  transitType?: 'flight' | 'train' | 'subway' | 'taxi' | 'walk';
 }
 
 export interface AIDaySchedule {
@@ -148,17 +148,11 @@ VOLI SALVATI: ${JSON.stringify(tripData.flights || [])}
 ALLOGGI SALVATI: ${JSON.stringify(tripData.accommodations || [])}
 LUOGHI DA VISITARE SALVATI: ${JSON.stringify(tripData.places || [])}
 
-REGOLE TASSATIVE SUI VOLI INTERMEDI E COINCIDENZE:
-1. OGNI VOLO DEVE ESSERE INSERITO NELLA DATA E NEGLI ORARI ESATTI IN CUI AVVIENE:
-   - Se l'utente ha un volo il 27/10/2026 dalle 06:40 alle 10:40 (es. da Taipei TPE a Tokyo Narita NRT), il 27/10/2026 DEVE essere inserito il VOLO AEREO nella timeline del mattino!
-   - NON inserire MAI passeggiate in città o visite ai musei mentre l'utente si trova in volo o in aeroporto!
-   - NON confondere le città: attrazioni di Tokyo (es. Edo Tokyo Open Air Museum) devono essere assegnate a TOKYO e MAI a Taipei!
-2. SPOSTAMENTI AEROPORTO ➔ HOTEL: Subito dopo l'atterraggio ad un aeroporto di arrivo/destinazione, la timeline DEVE includere il trasferimento dall'aeroporto all'hotel ed il check-in/deposito valigie prima delle visite turistiche.
-3. SCALI INTERMEDI: Se un volo contiene scali (layovers), mostra il tempo di attesa in aeroporto prima del volo successivo.
-
-Istruzioni di Generazione:
-1. Genera l'itinerario per OGNI giorno tra la data inizio e fine (Giorno 1 ... Giorno N).
-2. Ogni giorno deve contenere la data esatta in formato ISO YYYY-MM-DD.
+REGOLE TASSATIVE SUI VOLI NOTTURNI E CORRISPONDENZA CITTÀ:
+1. GESTIONE VOLO NOTTURNO SU 2 GIORNI: Se un volo parte la mattina/pomeriggio/sera del Giorno 1 (es. 22/10 ore 11:35 da Roma) e atterra la mattina del Giorno 2 (es. 23/10 ore 10:00 a Taipei):
+   - La timeline del Giorno 1 (22/10) DEVE contenere la partenza dal primo aeroporto, gli scali intermedi e terminare con la notte in aereo ("🌙 Volo Notturno Intercontinentale in Aereo"). NON INSERIRE L'ATTERRAGGIO A DESTINAZIONE O VISITE IN CITTÀ IL GIORNO 1!
+   - La timeline del Giorno 2 (23/10) DEVE INIZIARE alle ore 10:00 con l'atterraggio a destinazione, seguito dal trasferimento all'hotel e dal check-in prima delle visite turistiche!
+2. COERENZA ATTRAZIONI E CITTÀ: Associa le attrazioni ESCLUSIVAMENTE alla città e al paese corretto in cui si trova l'utente per quella data. Ad esempio, attrazioni giapponesi (es. Kamakura o Hokokuji) NON devono MAI essere posizionate a Taipei (Taiwan)!
 
 Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
 {
@@ -175,10 +169,10 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
       "dailyFeasibilitySummary": "...",
       "timeline": [
         {
-          "time": "06:40 - 10:40",
+          "time": "11:35 - 19:40",
           "activity": "...",
           "type": "place | transit | meal | break",
-          "transitType": "flight | train | bus | walk",
+          "transitType": "flight | train | subway | taxi | walk",
           "placeName": "...",
           "transitDetail": "...",
           "mealSuggestion": "...",
@@ -225,9 +219,8 @@ SCHEDULE ATTUALE DEL GIORNO: ${JSON.stringify(req.currentDaySchedule)}
 DATI VIAGGIO: ${JSON.stringify(req.travelData)}
 
 Istruzioni:
-1. Rielabora l'intera timeline della giornata rispettando la richiesta dell'utente.
-2. Mantieni inalterati i voli aerei e gli spostamenti fondamentali previsti per quella data.
-3. Riassegna le attrazioni solo alle città corrette in cui si trova l'utente.
+1. Rielabora la timeline della giornata mantenendo coerenza con i voli e la città di destinazione.
+2. Associa attrazioni coerenti con la città in cui si trova l'utente per quel giorno.
 
 Restituisci ESCLUSIVAMENTE l'oggetto JSON della giornata rielaborata rispettando questo schema:
 {
@@ -243,7 +236,7 @@ Restituisci ESCLUSIVAMENTE l'oggetto JSON della giornata rielaborata rispettando
       "time": "...",
       "activity": "...",
       "type": "place | transit | meal | break",
-      "transitType": "flight | train | bus | walk",
+      "transitType": "flight | train | subway | taxi | walk",
       "placeName": "...",
       "transitDetail": "...",
       "mealSuggestion": "...",

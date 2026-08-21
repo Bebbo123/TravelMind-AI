@@ -9,7 +9,7 @@ export interface AIItineraryItem {
   mealSuggestion?: string;
   costEstimateYen?: number;
   feasibilityWarning?: string;
-  transitType?: 'flight' | 'train' | 'bus' | 'walk';
+  transitType?: 'flight' | 'train' | 'subway' | 'taxi' | 'walk';
 }
 
 export interface AIDaySchedule {
@@ -114,7 +114,7 @@ export async function generateAIItinerary(
     }
   }
 
-  // --- Dynamic Multi-Flight & Multi-City Date Matcher Engine ---
+  // --- Dynamic Multi-Flight & Overnight Splitter Engine ---
   const dates = preferences ? { startDate: preferences.startDate, endDate: preferences.endDate } : inferTripDates(tripData);
   
   const start = new Date(dates.startDate || '2026-10-22');
@@ -140,58 +140,63 @@ export async function generateAIItinerary(
     const formattedDate = formatItalianDate(dateStr);
     const dayNumber = i + 1;
 
-    // 1. Find flights matching this date (departure, arrival, or layover)
-    const activeFlightOnDate = flights.find(f => {
+    // Check if there is a flight departing today
+    const flightDepartingToday = flights.find(f => f.departureTime && f.departureTime.slice(0, 10) === dateStr);
+    
+    // Check if there is a flight arriving today (whose departure was yesterday or earlier)
+    const flightArrivingToday = flights.find(f => {
+      if (!f.arrivalTime) return false;
+      const arrDate = f.arrivalTime.slice(0, 10);
       const depDate = f.departureTime ? f.departureTime.slice(0, 10) : '';
-      const arrDate = f.arrivalTime ? f.arrivalTime.slice(0, 10) : '';
-      if (depDate === dateStr || arrDate === dateStr) return true;
-      if (f.layovers) {
-        return f.layovers.some(l => 
-          (l.arrivalTime && l.arrivalTime.slice(0, 10) === dateStr) || 
-          (l.departureTime && l.departureTime.slice(0, 10) === dateStr)
-        );
-      }
-      return false;
+      return arrDate === dateStr && depDate !== dateStr;
     });
 
-    // 2. Find accommodation active on this date
     const currentAcc = accs.find(a => {
       if (!a.checkIn || !a.checkOut) return false;
       return dateStr >= a.checkIn && dateStr <= a.checkOut;
     }) || accs[i % (accs.length || 1)] || { name: 'Hotel in Centro', city: 'Tokyo' };
 
-    const currentCity = currentAcc.city || 'Tokyo';
+    let currentCity = currentAcc.city || 'Tokyo';
+    if (flightDepartingToday && flightDepartingToday.origin.toLowerCase().includes('roma')) {
+      currentCity = 'In Volo (Roma ➔ Taipei)';
+    }
 
-    // 3. Filter places STRICTLY matching the active city!
+    // Filter places STRICTLY matching the active city! (No Japanese temples in Taipei)
     const cityPlaces = places.filter(p => {
       if (!p.city) return true;
-      return p.city.toLowerCase().includes(currentCity.toLowerCase()) || 
-             currentCity.toLowerCase().includes(p.city.toLowerCase());
+      const pCity = p.city.toLowerCase();
+      const curCity = currentCity.toLowerCase();
+      if (curCity.includes('taipei') || curCity.includes('taiwan')) {
+        return pCity.includes('taipei') || pCity.includes('taiwan');
+      }
+      if (curCity.includes('tokyo')) {
+        return pCity.includes('tokyo') || pCity.includes('japan');
+      }
+      return pCity.includes(curCity) || curCity.includes(pCity);
     });
     
     const dayPlaces = cityPlaces.slice((i * 2) % (cityPlaces.length || 1), ((i * 2) % (cityPlaces.length || 1)) + 2);
-    const primaryPlace = dayPlaces[0] || places[i % (places.length || 1)] || { name: 'Esplorazione Quartiere', category: 'Quartiere/Shopping' };
+    const primaryPlace = dayPlaces[0] || (currentCity.includes('Taipei') ? { name: 'Grattacielo Taipei 101 & Mercato Serale Shilin', category: 'Quartiere/Shopping' } : { name: 'Esplorazione Quartiere', category: 'Quartiere/Shopping' });
     const secondaryPlace = dayPlaces[1];
 
-    const isHotelChangeDay = previousAccName && previousAccName !== currentAcc.name && !activeFlightOnDate;
+    const isHotelChangeDay = previousAccName && previousAccName !== currentAcc.name && !flightDepartingToday && !flightArrivingToday;
 
     const timeline: AIItineraryItem[] = [];
 
-    if (activeFlightOnDate) {
-      // THIS DAY HAS A FLIGHT!
-      const depTime = activeFlightOnDate.departureTime ? new Date(activeFlightOnDate.departureTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '07:00';
-      const arrTime = activeFlightOnDate.arrivalTime ? new Date(activeFlightOnDate.arrivalTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '11:00';
-
+    if (flightDepartingToday) {
+      // OVERNIGHT FLIGHT DEPARTURE DAY (e.g. 22/10/2026: Rome FCO 11:35 ➔ Abu Dhabi AUH 19:40-21:20 ➔ Night Flight)
+      const depTime = new Date(flightDepartingToday.departureTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+      
       timeline.push({
         time: depTime,
-        activity: `🛫 Volo Aereo ${activeFlightOnDate.airline} (${activeFlightOnDate.flightNumber}): ${activeFlightOnDate.origin} ➔ ${activeFlightOnDate.destination}`,
+        activity: `🛫 Partenza Volo Aereo ${flightDepartingToday.airline} (${flightDepartingToday.flightNumber}): ${flightDepartingToday.origin} ➔ ${flightDepartingToday.destination}`,
         type: 'transit',
         transitType: 'flight',
-        transitDetail: `Compagnia: ${activeFlightOnDate.airline}. Terminal: ${activeFlightOnDate.terminal || '1'}. Presentarsi 3 ore prima.`
+        transitDetail: `Compagnia: ${flightDepartingToday.airline}. Terminal: ${flightDepartingToday.terminal || '3'}. Presentarsi in aeroporto 3 ore prima.`
       });
 
-      if (activeFlightOnDate.layovers && activeFlightOnDate.layovers.length > 0) {
-        activeFlightOnDate.layovers.forEach((l, lIdx) => {
+      if (flightDepartingToday.layovers && flightDepartingToday.layovers.length > 0) {
+        flightDepartingToday.layovers.forEach((l, lIdx) => {
           const lDep = l.departureTime ? new Date(l.departureTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '';
           const lArr = l.arrivalTime ? new Date(l.arrivalTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '';
           timeline.push({
@@ -204,15 +209,28 @@ export async function generateAIItinerary(
       }
 
       timeline.push({
+        time: '21:20 - 08:00',
+        activity: '🌙 Volo Notturno Intercontinentale in Aereo',
+        type: 'break',
+        transitType: 'flight',
+        transitDetail: 'Pernottamento e riposo a bordo del volo. L\'atterraggio avverrà la mattina del giorno successivo.'
+      });
+
+    } else if (flightArrivingToday) {
+      // OVERNIGHT FLIGHT ARRIVAL DAY (e.g. 23/10/2026: Arrival Taipei TPE 10:00 ➔ Hotel ➔ Taipei afternoon)
+      const arrTime = new Date(flightArrivingToday.arrivalTime).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+      currentCity = currentAcc.city || flightArrivingToday.destination;
+
+      timeline.push({
         time: arrTime,
-        activity: `🛬 Atterraggio FINALE a ${activeFlightOnDate.destination}`,
+        activity: `🛬 Atterraggio FINALE a ${flightArrivingToday.destination}`,
         type: 'place',
-        placeName: activeFlightOnDate.destination
+        placeName: flightArrivingToday.destination
       });
 
       timeline.push({
         time: '12:00 - 13:00',
-        activity: `Spostamento dall'Aeroporto ad Hotel (${currentAcc.name})`,
+        activity: `Spostamento dall'Aeroporto all'Hotel (${currentAcc.name})`,
         type: 'transit',
         transitType: 'train',
         transitDetail: `Treno Express dall'aeroporto a ${currentAcc.name} (${currentCity}).`
@@ -283,7 +301,7 @@ export async function generateAIItinerary(
         time: '09:00 - 09:30',
         activity: `Spostamento in Metropolitana/Mezzi verso ${primaryPlace.name}`,
         type: 'transit',
-        transitType: 'train',
+        transitType: 'subway',
         transitDetail: `Metropolitana da ${currentAcc.name} a ${primaryPlace.name} (20 min)`
       });
       timeline.push({
@@ -310,7 +328,7 @@ export async function generateAIItinerary(
       } else {
         timeline.push({
           time: '14:00 - 17:00',
-          activity: `Passeggiata nel quartiere di ${currentCity}`,
+          activity: `Passeggiata a piedi nel quartiere di ${currentCity}`,
           type: 'place',
           transitType: 'walk',
           placeName: `Quartiere centrale ${currentCity}`
@@ -339,15 +357,19 @@ export async function generateAIItinerary(
       dayNumber,
       date: dateStr,
       formattedDate,
-      title: activeFlightOnDate 
-        ? `${formattedDate} • Volo Aereo ${activeFlightOnDate.flightNumber} (${activeFlightOnDate.origin} ➔ ${activeFlightOnDate.destination})`
+      title: flightDepartingToday
+        ? `${formattedDate} • Partenza Volo ${flightDepartingToday.flightNumber} & Volo Notturno`
+        : flightArrivingToday
+        ? `${formattedDate} • Atterraggio a ${currentCity} & Check-in Hotel`
         : isHotelChangeDay
         ? `${formattedDate} • Trasferimento a ${currentCity} & ${primaryPlace.name}`
         : `${formattedDate} • ${primaryPlace.name} (${currentCity})`,
       city: currentCity,
       accommodationName: currentAcc.name,
-      dailyFeasibilitySummary: activeFlightOnDate
-        ? `Giornata con Volo Aereo il ${formattedDate}: ${activeFlightOnDate.origin} ➔ ${activeFlightOnDate.destination}.`
+      dailyFeasibilitySummary: flightDepartingToday
+        ? `Partenza il ${formattedDate}: Volo notturno intercontinentale in aereo.`
+        : flightArrivingToday
+        ? `Arrivo a ${currentCity} il ${formattedDate}: Atterraggio, check-in e visite pomeridiane.`
         : isHotelChangeDay
         ? `Spostamento Interurbano il ${formattedDate}: Trasferimento da ${previousAccName} a ${currentAcc.name}.`
         : `Giorno ${formattedDate}: Spostamenti integrati con l'hotel ${currentAcc.name}.`,
@@ -390,7 +412,7 @@ export async function generateAIItinerary(
 
   return {
     globalFeasibilityRating: preferences?.pace === 'Intenso' ? 'Troppo Densa' : 'Ottima',
-    globalFeasibilityNotes: `Itinerario generato dal ${formatItalianDate(dates.startDate)} al ${formatItalianDate(dates.endDate)} (${totalDays} giorni). Tutti i voli e gli scali sono stati inseriti nelle date esatte.`,
+    globalFeasibilityNotes: `Itinerario generato dal ${formatItalianDate(dates.startDate)} al ${formatItalianDate(dates.endDate)} (${totalDays} giorni). Voli notturni separati correttamente su 2 giorni ed attrazioni abbinate alle rispettive città.`,
     days,
     suggestedNewPlaces
   };
