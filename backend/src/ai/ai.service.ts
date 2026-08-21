@@ -63,6 +63,14 @@ export interface AIItineraryResponse {
   suggestedNewPlaces: AIPlaceSuggestion[];
 }
 
+export interface ReplanDayRequest {
+  dayNumber: number;
+  date: string;
+  currentDaySchedule: AIDaySchedule;
+  userPrompt: string;
+  travelData: any;
+}
+
 @Injectable()
 export class AIService {
   private readonly logger = new Logger(AIService.name);
@@ -79,7 +87,6 @@ export class AIService {
 
   async searchPlace(req: AISearchRequest): Promise<AISearchResult> {
     const { query, type } = req;
-    
     if (!this.genAI) {
       throw new Error('Gemini API is not configured on backend.');
     }
@@ -87,25 +94,23 @@ export class AIService {
     const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const isPlace = type === 'place';
     const prompt = `
-Sei un esperto di viaggi internazionali e concierge turistico specializzato per il Giappone e destinazioni mondiali.
+Sei un esperto di viaggi internazionali e concierge turistico per il Giappone.
 L'utente sta cercando ${isPlace ? 'un luogo da visitare / un\'attrazione' : 'un alloggio / hotel'}: "${query}".
 
-Fornisci informazioni dettagliate e precise in formato JSON strictly senza markdown extra.
-
-Schema JSON richiesto:
+Fornisci informazioni dettagliate e precise in formato JSON strictly senza markdown extra:
 {
-  "name": "Nome in italiano o internazionale principale",
-  "officialNameJa": "Nome in caratteri kanji/giapponesi se applicabile o lingua locale",
+  "name": "Nome in italiano o principale",
+  "officialNameJa": "Nome in kanji/caratteri locali se applicabile",
   "category": "${isPlace ? 'Santuario/Tempio | Ristorante/Cibo | Museo/Cultura | Quartiere/Shopping | Natura/Parco | Altro' : 'Hotel | Ryokan | Hostel | Appartamento'}",
   "city": "Città (es. Tokyo, Kyoto, Osaka)",
   "address": "Indirizzo completo leggibile",
-  "openingHours": "${isPlace ? 'Orari di apertura dettagliati (es. 09:00 - 17:00 o Aperto 24h)' : 'N/A'}",
-  "checkInTimes": "${!isPlace ? 'Orari di check-in e check-out (es. Check-in 15:00, Check-out 11:00)' : 'N/A'}",
+  "openingHours": "${isPlace ? 'Orari di apertura' : 'N/A'}",
+  "checkInTimes": "${!isPlace ? 'Check-in 15:00, Check-out 11:00' : 'N/A'}",
   "estimatedCostYen": 1500,
-  "phone": "+81 XX-XXXX-XXXX (se disponibile)",
-  "website": "URL ufficiale (es. https://...)",
+  "phone": "+81 XX-XXXX-XXXX",
+  "website": "https://...",
   "priority": "Alta | Media | Bassa",
-  "notes": "Consigli di viaggio fondamentali, momento migliore della giornata per la visita, fermata metropolitana o treno più vicina."
+  "notes": "Consigli pratici e fermata metro più vicina."
 }
 `;
 
@@ -115,69 +120,67 @@ Schema JSON richiesto:
     return JSON.parse(cleanedJson) as AISearchResult;
   }
 
-  async generateItineraryPlan(tripData: any): Promise<AIItineraryResponse> {
+  async generateItineraryPlan(payload: any): Promise<AIItineraryResponse> {
     if (!this.genAI) {
       throw new Error('Gemini API is not configured on backend.');
     }
 
     const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const prompt = `
-Sei un pianificatore di itinerari di viaggio altamente qualificato e valutatore di fattibilità per viaggi in Giappone.
-Analizza i seguenti dati del viaggio forniti dall'utente:
+    const tripData = payload.tripData || payload;
+    const preferences = payload.preferences || {};
 
+    const prompt = `
+Sei un pianificatore di viaggi esperto in Giappone e valutatore di fattibilità.
+Organizza un itinerario COMPLETO PER TUTTI I GIORNI compresi tra le date specificate dall'utente.
+
+PREFERENZE UTENTE:
+- Data Inizio Viaggio: ${preferences.startDate || 'Non specificata'}
+- Data Fine Viaggio: ${preferences.endDate || 'Non specificata'}
+- Ritmo di Viaggio desiderato: ${preferences.pace || 'Equilibrato'}
+- Interessi principali: ${(preferences.interests || []).join(', ') || 'Tutti'}
+- Note & Istruzioni Custom: ${preferences.customInstructions || 'Nessuna'}
+
+DATI REALI SALVATI DALL'UTENTE:
 VOLI: ${JSON.stringify(tripData.flights || [])}
 ALLOGGI: ${JSON.stringify(tripData.accommodations || [])}
 LUOGHI DA VISITARE: ${JSON.stringify(tripData.places || [])}
 
-Compiti:
-1. Organizza un itinerario dettagliato giorno per giorno (Timeline oraria) includendo:
-   - Tappe e luoghi da visitare presenti nella lista dell'utente.
-   - Spostamenti consigliati e mezzi di trasporto (treni JR, metropolitane, Shinkansen, bus) con stima dei minuti.
-   - Pause per pranzo e cena nei quartieri dove si trova l'utente.
-2. VALUTA LA FATTIBILITÀ (Feasibility):
-   - Se una giornata ha troppe tappe o luoghi distanti tra loro, aggiungi avvisi di fattibilità ("feasibilityWarning") specifici.
-   - Se un luogo richiede troppo tempo o è difficile da raggiungere nel tempo disponibile, segnalalo chiaramente.
-3. SUGGERISCI NUOVI LUOGHI EXTRA:
-   - Identifica 2 o 3 attrazioni o ristoranti imperdibili nei pressi delle zone visitate dall'utente ma NON ancora presenti nella lista dell'utente ("suggestedNewPlaces").
+REGOLE TASSATIVE SGLI SPOSTAMENTI HOTEL & AEROPORTO:
+1. SPOSTAMENTO AEROPORTO ➔ HOTEL: Nel giorno di arrivo, includi tassativamente nella timeline l'orario e il mezzo esatto per andare dall'aeroporto di arrivo (es. Haneda/Narita) al primo hotel (es. Keikyu Express, Tokyo Monorail o Narita Express) con durata e costo.
+2. SPOSTAMENTO HOTEL ➔ HOTEL (CAMBIO CITTÀ): Nei giorni di cambio alloggio (es. quando si passa da Tokyo a Kyoto), includi nella timeline l'orario esatto di Check-out dall'Hotel 1, il trasferimento alla Stazione dei treni (es. Stazione di Tokyo), il treno Shinkansen/espresso da prendere con la durata esatta (es. 2h15m), l'arrivo alla Stazione di destinazione e il trasferimento al nuovo Hotel 2 con indicazione per il deposito bagagli.
+3. SPOSTAMENTO HOTEL ➔ AEROPORTO: Nel giorno di partenza, calcola l'orario di trasferimento dall'ultimo hotel all'aeroporto di partenza con almeno 3 ore di anticipo rispetto all'orario del volo.
 
-Restituisci ESCLUSIVAMENTE un oggetto JSON valido rispettando questo schema:
+Istruzioni di Generazione:
+1. Genera l'itinerario per OGNI giorno tra la data inizio e fine (Giorno 1 ... Giorno N).
+2. Per ogni giorno includi timeline oraria con:
+   - Tappe e luoghi da visitare presenti nella lista.
+   - Spostamenti dettagliati con mezzi di trasporto (treni JR, metropolitane, Shinkansen, bus) e tempi in minuti.
+   - Pause pranzo e cena in base al ritmo scelto e agli interessi.
+   - Avvisi di fattibilità ("feasibilityWarning") se una tappa è troppo stancante, lontana o densa.
+3. Fornisci 3 o 4 suggerimenti di "suggestedNewPlaces" extra vicini alle tappe visitate ma non ancora salvati.
 
+Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
 {
   "globalFeasibilityRating": "Ottima" | "Accettabile" | "Troppo Densa" | "Critica",
-  "globalFeasibilityNotes": "Spiegazione sintetica della fattibilità generale del viaggio.",
+  "globalFeasibilityNotes": "Sommario generale della fattibilità.",
   "days": [
     {
       "dayNumber": 1,
-      "date": "2026-10-11",
-      "title": "Giorno 1: Arrivo a Tokyo & Esplorazione Asakusa",
+      "date": "YYYY-MM-DD",
+      "title": "Giorno 1: ...",
       "city": "Tokyo",
-      "accommodationName": "Shinjuku Prince Hotel",
-      "dailyFeasibilitySummary": "Ritmo bilanciato con tempo sufficiente per check-in e pranzo.",
+      "accommodationName": "Hotel...",
+      "dailyFeasibilitySummary": "...",
       "timeline": [
         {
-          "time": "08:20",
-          "activity": "Arrivo a Tokyo Haneda (HND)",
-          "type": "place",
-          "placeName": "Tokyo Haneda Airport"
-        },
-        {
-          "time": "09:30 - 10:30",
-          "activity": "Trasferimento in Hotel con treno Keikyu Line",
-          "type": "transit",
-          "transitDetail": "Treno Keikyu Airport Line diretto a Yamanote Shinjuku (50 min, ¥620)"
-        },
-        {
-          "time": "12:30 - 13:30",
-          "activity": "Pranzo a Shinjuku",
-          "type": "meal",
-          "mealSuggestion": "Ramen tradizionale vicinissimo all'hotel"
-        },
-        {
-          "time": "14:30 - 17:00",
-          "activity": "Visita Tempio Senso-ji",
-          "type": "place",
-          "placeName": "Senso-ji Temple",
+          "time": "09:00 - 10:00",
+          "activity": "...",
+          "type": "place | transit | meal | break",
+          "placeName": "...",
+          "transitDetail": "...",
+          "mealSuggestion": "...",
+          "costEstimateYen": 0,
           "feasibilityWarning": null
         }
       ]
@@ -186,12 +189,12 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido rispettando questo schema:
   "suggestedNewPlaces": [
     {
       "id": "sug_1",
-      "name": "Parco di Ueno & Mercato Ameyoko",
-      "officialNameJa": "上野公園",
-      "category": "Quartiere/Shopping",
-      "city": "Tokyo",
-      "address": "Ueno, Taito-ku, Tokyo",
-      "reason": "Si trova a solo 2 fermate di metro dal tempio Senso-ji che visiterai il Giorno 1.",
+      "name": "...",
+      "officialNameJa": "...",
+      "category": "...",
+      "city": "...",
+      "address": "...",
+      "reason": "...",
       "estimatedCostYen": 0
     }
   ]
@@ -202,5 +205,54 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido rispettando questo schema:
     const responseText = result.response.text();
     const cleanedJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleanedJson) as AIItineraryResponse;
+  }
+
+  async replanDayWithAI(req: ReplanDayRequest): Promise<AIDaySchedule> {
+    if (!this.genAI) {
+      throw new Error('Gemini API is not configured on backend.');
+    }
+
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    const prompt = `
+Sei un concierge turistico AI in tempo reale per viaggiatori in Giappone.
+L'utente si trova a metà giornata durante il viaggio ed ha inviato questa richiesta di MODIFICA AL VOLO per il Giorno ${req.dayNumber} (${req.date}):
+
+RICHESTA UTENTE AL VOLO: "${req.userPrompt}"
+SCHEDULE ATTUALE DEL GIORNO: ${JSON.stringify(req.currentDaySchedule)}
+DATI VIAGGIO: ${JSON.stringify(req.travelData)}
+
+Istruzioni:
+1. Rielabora l'intera timeline della giornata rispettando la richiesta dell'utente (es. se ha finito prima, aggiungi attrazioni flash vicine; se è stanco, alleggerisci il programma; se piove, sostituisci con luoghi al coperto; se chiede di sostituire un luogo, trova un'alternativa eccellente).
+2. Mantieni sempre chiari gli spostamenti essenziali verso l'hotel o la stazione.
+3. Valuta la nuova fattibilità e aggiorna "dailyFeasibilitySummary" e gli avvisi "feasibilityWarning" nella timeline.
+
+Restituisci ESCLUSIVAMENTE l'oggetto JSON della giornata rielaborata rispettando questo schema:
+{
+  "dayNumber": ${req.dayNumber},
+  "date": "${req.date}",
+  "title": "Giorno ${req.dayNumber}: (Titolo aggiornato)",
+  "city": "${req.currentDaySchedule.city}",
+  "accommodationName": "${req.currentDaySchedule.accommodationName || ''}",
+  "dailyFeasibilitySummary": "Nuova valutazione di fattibilità post-modifica...",
+  "timeline": [
+    {
+      "time": "...",
+      "activity": "...",
+      "type": "place | transit | meal | break",
+      "placeName": "...",
+      "transitDetail": "...",
+      "mealSuggestion": "...",
+      "costEstimateYen": 0,
+      "feasibilityWarning": null
+    }
+  ]
+}
+`;
+
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+    const cleanedJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleanedJson) as AIDaySchedule;
   }
 }

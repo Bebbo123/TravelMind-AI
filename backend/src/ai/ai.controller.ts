@@ -1,5 +1,5 @@
 import { Controller, Post, Body, HttpException, HttpStatus } from '@nestjs/common';
-import { AIService, AISearchRequest } from './ai.service';
+import { AIService, AISearchRequest, ReplanDayRequest } from './ai.service';
 
 @Controller('ai')
 export class AIController {
@@ -22,13 +22,29 @@ export class AIController {
   }
 
   @Post('generate-itinerary')
-  async generateItinerary(@Body() tripData: any) {
+  async generateItinerary(@Body() payload: any) {
     try {
-      const result = await this.aiService.generateItineraryPlan(tripData);
+      const result = await this.aiService.generateItineraryPlan(payload);
       return { success: true, data: result };
     } catch (error: any) {
       throw new HttpException(
         error?.message || 'Failed to generate AI itinerary',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Post('replan-day')
+  async replanDay(@Body() body: ReplanDayRequest) {
+    if (!body.userPrompt || !body.currentDaySchedule) {
+      throw new HttpException('Missing required parameters for replanning day', HttpStatus.BAD_REQUEST);
+    }
+    try {
+      const result = await this.aiService.replanDayWithAI(body);
+      return { success: true, data: result };
+    } catch (error: any) {
+      throw new HttpException(
+        error?.message || 'Failed to replan day with AI',
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
