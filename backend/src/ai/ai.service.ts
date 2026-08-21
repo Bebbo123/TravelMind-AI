@@ -53,6 +53,8 @@ export interface AIDaySchedule {
   accommodationName?: string;
   timeline: AIItineraryItem[];
   dailyFeasibilitySummary: string;
+  fatigueScore?: number;
+  weatherForecast?: string;
 }
 
 export interface AIPlaceSuggestion {
@@ -142,7 +144,7 @@ Fornisci informazioni dettagliate e precise in formato JSON strictly senza markd
 
     const prompt = `
 Sei un pianificatore di viaggi esperto, guida Michelin e concierge turistico internazionale.
-Organizza un itinerario PROFESSIONALE E Dettagliato PER TUTTI I GIORNI tra le date specificate.
+Organizza un itinerario PROFESSIONALE E DETTAGLIATO PER TUTTI I GIORNI tra le date specificate.
 
 PREFERENZE UTENTE:
 - Data Inizio Viaggio: ${preferences.startDate || 'Non specificata'}
@@ -156,11 +158,17 @@ VOLI SALVATI: ${JSON.stringify(tripData.flights || [])}
 ALLOGGI SALVATI: ${JSON.stringify(tripData.accommodations || [])}
 LUOGHI DA VISITARE SALVATI: ${JSON.stringify(tripData.places || [])}
 
-REGOLE TASSATIVE MICHELIN & CONCIERGE:
-1. CLUSTERING GEOGRAFICO QUARTIERI: Raggruppa le attrazioni della stessa zona (es. Cluster Asakusa: Tempio Senso-ji, Nakamise, Sumida Park, Skytree; Cluster Shibuya: Incrocio, Takeshita St, Meiji Jingu) nella stessa giornata per evitare spostamenti inutili a zigzag!
-2. CICLO HOTEL QUOTIDIANO: Ogni giornata inizia tassativamente con la partenza dall'hotel (08:00 Partenza Hotel) e termina con il rientro serale in hotel (21:30 Rientro Hotel).
-3. GASTRONOMIA DI QUARTIERE: Per ogni pasto indica il piatto consigliato (es. Ichiran Tonkotsu Ramen ~12€) ed i cibi tipici di quartiere (es. Asakusa: Melon Pan, Taiyaki; Osaka: Takoyaki, Okonomiyaki).
-4. TRADUZIONE BILINGUE STAZIONI: Formatta stazioni ed attrazioni come: Stazione di Shinjuku (新宿駅) [Shinjuku-eki], Tempio Senso-ji (浅草寺) [Asakusa-dera].
+REGOLE TASSATIVE SULLE DATE ED ORARI DEI VOLI:
+1. GIORNO DI ARRIVO VOLO: Se un volo atterra in un giorno (es. 23/10 alle 10:00 AM), È VIETATO PANIFICARE QUALSIASI VISITA O PARTENZA DA HOTEL PRIMA DELL'ORARIO DI ATTERRAGGIO (10:00).
+   La timeline del giorno di arrivo DEVE iniziare tassativamente con:
+   - Orario Atterraggio (es. 10:00): Atterraggio Aeroporto
+   - 10:00 - 11:15: 🛂 Immigrazione, Controllo Passaporti & Recupero Bagagli
+   - 11:15 - 12:05: 🚆 Trasferimento Treno Airport Express ➔ Hotel
+   - 12:05 - 13:00: 🏨 Check-in / Deposito Valigie presso Hotel
+   - 13:00 - 14:00: 🍜 Pranzo di Benvenuto
+   - 14:30 in poi: Prime visite leggere del pomeriggio.
+2. GIORNO DI PARTENZA VOLO: Presentarsi 3 ore prima in aeroporto per voli internazionali. Bloccare qualsiasi visita turistica dopo l'orario di trasferimento.
+3. CLUSTERING GEOGRAFICO QUARTIERI: Raggruppa le attrazioni della stessa zona nella stessa giornata.
 
 Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
 {
@@ -175,9 +183,11 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
       "city": "...",
       "accommodationName": "...",
       "dailyFeasibilitySummary": "...",
+      "fatigueScore": 3,
+      "weatherForecast": "Soleggiato ☀️",
       "timeline": [
         {
-          "time": "08:00 - 08:30",
+          "time": "10:00 - 11:15",
           "activity": "...",
           "type": "place | transit | meal | break",
           "transitType": "flight | train | subway | taxi | walk",
@@ -186,7 +196,7 @@ Restituisci ESCLUSIVAMENTE un oggetto JSON valido in questo formato:
           "mealSuggestion": "...",
           "recommendedDish": "...",
           "priceRangeEuros": 12,
-          "districtFoodSpecialties": ["Melon Pan", "Taiyaki"],
+          "districtFoodSpecialties": ["Xiao Long Bao"],
           "costEstimateYen": 0,
           "feasibilityWarning": null
         }
@@ -230,7 +240,7 @@ SCHEDULE ATTUALE DEL GIORNO: ${JSON.stringify(req.currentDaySchedule)}
 DATI VIAGGIO: ${JSON.stringify(req.travelData)}
 
 Istruzioni:
-1. Rielabora la timeline della giornata mantenendo il raggruppamento per quartiere e la struttura del ciclo hotel.
+1. Rielabora la timeline della giornata rispettando i vincoli di arrivo volo ed immigrazione.
 2. Inserisci alternative gastronomiche locali coerenti con la nuova zona.
 
 Restituisci ESCLUSIVAMENTE l'oggetto JSON della giornata rielaborata rispettando questo schema:
